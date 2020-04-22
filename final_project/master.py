@@ -16,7 +16,7 @@ from datetime import datetime
 from multiprocessing import Value
 import csv
 import json
-
+"""
 from sqlalchemy.ext.declarative import declarative_base
 Base = declarative_base()
 
@@ -53,13 +53,15 @@ Session = sessionmaker(bind=engine)
 session=Session()
 
 connection = pika.BlockingConnection(
-    pika.ConnectionParameters(host='rmq'))
+    pika.ConnectionParameters(host='rabbitmq'))
 channel = connection.channel()
 
 channel.queue_declare(queue='WRITE_queue', durable=True)
 print(' [*] Waiting for messages.')
 
 def writetodb(str1):
+    str1 = str1[2:-1]
+    print("query:",str1)
     con.execute(str1)
 
 def callback(ch, method, properties, body):
@@ -68,11 +70,11 @@ def callback(ch, method, properties, body):
     print(abc)
     writetodb(abc)
     print(" [x] Done")
-    ch.basic_ack(delivery_tag=method.delivery_tag)
-channel.basic_qos(prefetch_count=10)
-channel.basic_consume(queue='WRITE_queue', on_message_callback=callback)
+channel.basic_qos(prefetch_count=30)
+channel.basic_consume(queue='WRITE_queue', on_message_callback=callback,auto_ack=True)
 
 channel.start_consuming()
+"""
 
 if __name__ == '__main__':
     app.run(debug=True,host='0.0.0.0',port=8000)

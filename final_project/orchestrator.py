@@ -17,9 +17,9 @@ import pika
 import sys
 import uuid
 
-connection = pika.BlockingConnection(
-pika.ConnectionParameters(host='rmq'))
-channel = connection.channel()
+#connection = pika.BlockingConnection(
+#pika.ConnectionParameters(host='rabbitmq'))
+#channel = connection.channel()
 
 
 
@@ -27,11 +27,11 @@ class OrchestratorRpcClient(object):
 
     def __init__(self):
         self.connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host='rmq'))
+            pika.ConnectionParameters(host='0.0.0.0'))
 
         self.channel = self.connection.channel()
 
-        result = self.channel.queue_declare(queue='rpc_queue', exclusive=True)
+        result = self.channel.queue_declare(queue='')
         self.callback_queue = result.method.queue
 
         self.channel.basic_consume(
@@ -48,7 +48,7 @@ class OrchestratorRpcClient(object):
         self.corr_id = str(uuid.uuid4())
         self.channel.basic_publish(
             exchange='',
-            routing_key='READ_queue',
+            routing_key='rpc_queue',
             properties=pika.BasicProperties(
                 reply_to=self.callback_queue,
                 correlation_id=self.corr_id,
@@ -59,19 +59,9 @@ class OrchestratorRpcClient(object):
         return self.response
 
 
-#orchestrator_rpc = OrchestratorRpcClient()
+orchestrator_rpc = OrchestratorRpcClient()
 
-#print(" [x] Requesting fib(30)")
-#response = orchestrator_rpc.call(30)
-#print(" [.] Got %r" % response)
-
-
-
-
-
-
-
-def write_to_queue(queue_name,message) :
+"""def write_to_queue(queue_name,message) :
     channel.queue_declare(queue=queue_name, durable=True)
     channel.basic_publish(
         exchange='',
@@ -94,24 +84,30 @@ def writetodb():
         write_message = 'DELETE FROM ' + user_details['table'] + ' WHERE  ' + user_details['column'] + '=' '"' + user_details['value'] + '"'
         write_to_queue(queue_name,write_message)
     return "written"
+"""
 
 
 # 9
-"""@app.route('/api/v1/db/read', methods=["POST"])
+@app.route('/api/v1/db/read', methods=["POST"])
 def readfromdb():
+    print("heellloo im here12132\n")
     queue_name = 'READ_queue'
+    print("heellloo im here1341\n")
     user_details = dict(request.json)
-    #print("AJEya\n")
+    print("heellloo im here1342\n")
     read_message = 'SELECT '+ user_details['columns'] + ' FROM ' + user_details['table'] + ' WHERE ' + user_details['where']
-    response = orchestrator_rpc.call(read_message)
-    return response"""
+    print("heellloo im here1343\n")
+    response = orchestrator_rpc.call(json.dumps(user_details))
+    print("heellloo im here134\n")
+    return response
+    
     
 @app.route('/api/v1/db/clear',methods=["POST"])
 def cleardb():
-    queue_name = 'WRITE_queue'
+    '''queue_name = 'WRITE_queue'
     write_to_queue('DELETE FROM Riders')
     write_to_queue('DELETE FROM Ride')
-    write_to_queue('DELETE FROM User')
+    write_to_queue('DELETE FROM User')'''
     return {},200
     
 if __name__ == '__main__':
