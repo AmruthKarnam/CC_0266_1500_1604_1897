@@ -70,11 +70,11 @@ def callback(ch, method, properties, body):
     print(abc)
     writetodb(abc)
     print(" [x] Done")
-    ch.basic_ack(delivery_tag=method.delivery_tag)
 channel.basic_qos(prefetch_count=10)
-channel.basic_consume(queue='WRITE_queue', on_message_callback=callback)
+channel.basic_consume(queue='WRITE_queue', on_message_callback=callback,auto_ack=True)
 
-channel.start_consuming()"""
+channel.start_consuming()
+"""
 
 if __name__ == '__main__':
     app.run(debug=True,host='0.0.0.0',port=8000)
