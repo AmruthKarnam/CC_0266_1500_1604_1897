@@ -38,6 +38,8 @@ class FibonacciRpcClient:
 			routing_key='rpc_queue',
 		)
 		return int(await future)
+
+
 async def main(loop):
 	fibonacci_rpc = await FibonacciRpcClient(loop).connect()
 	print(" [x] Requesting fib(30)")

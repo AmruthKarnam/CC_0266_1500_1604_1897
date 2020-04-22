@@ -70,7 +70,7 @@ def callback(ch, method, properties, body):
     print(abc)
     writetodb(abc)
     print(" [x] Done")
-channel.basic_qos(prefetch_count=10)
+channel.basic_qos(prefetch_count=30)
 channel.basic_consume(queue='WRITE_queue', on_message_callback=callback,auto_ack=True)
 
 channel.start_consuming()

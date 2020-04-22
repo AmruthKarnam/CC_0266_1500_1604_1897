@@ -11,17 +11,52 @@ from sqlalchemy.orm import sessionmaker
 import random
 from datetime import datetime
 from multiprocessing import Value
+import time
 import csv
 import json
 import pika
 import sys
 import uuid
-
+import threading
+import math
+import docker
+counter = Value('i', 0)
+spawners = 1
 #connection = pika.BlockingConnection(
 #pika.ConnectionParameters(host='rabbitmq'))
 #channel = connection.channel()
 
+def http_count():
+    with counter.get_lock():
+        counter.value += 1
 
+def timer():
+    print("hmm\n")
+    global counter
+    while(True):
+        print("hello im here\n")
+        time.sleep(5)
+        no_of_req = counter.value
+        containers =  math.ceil(no_of_req/20)
+        print("ajeya=",containers)
+        if containers == 0:
+            containers = 1
+        client = docker.from_env()
+        
+        res=requests.delete('http://localhost:8000/api/v1/_count')
+
+@app.route('/api/v1/_count',methods=["GET"])
+def http_count1():
+    list1 = []
+    list1.append(counter.value)
+
+    return json.dumps(list1),200
+
+@app.route('/api/v1/_count',methods=["DELETE"])
+def http_count_reset():
+    with counter.get_lock():
+        counter.value = 0
+    return {},200
 
 class OrchestratorRpcClient(object):
 
@@ -31,7 +66,7 @@ class OrchestratorRpcClient(object):
 
         self.channel = self.connection.channel()
 
-        result = self.channel.queue_declare(queue='rpc_queue')
+        result = self.channel.queue_declare(queue='')
         self.callback_queue = result.method.queue
 
         self.channel.basic_consume(
@@ -48,7 +83,7 @@ class OrchestratorRpcClient(object):
         self.corr_id = str(uuid.uuid4())
         self.channel.basic_publish(
             exchange='',
-            routing_key='READ_queue',
+            routing_key='rpc_queue',
             properties=pika.BasicProperties(
                 reply_to=self.callback_queue,
                 correlation_id=self.corr_id,
@@ -90,19 +125,31 @@ def writetodb():
 # 9
 @app.route('/api/v1/db/read', methods=["POST"])
 def readfromdb():
+    http_count()
+    print("heellloo im here12132\n")
     queue_name = 'READ_queue'
+    print("heellloo im here1341\n")
     user_details = dict(request.json)
+    print("heellloo im here1342\n")
     read_message = 'SELECT '+ user_details['columns'] + ' FROM ' + user_details['table'] + ' WHERE ' + user_details['where']
-    response = orchestrator_rpc.call(read_message)
+    print("heellloo im here1343\n")
+    response = orchestrator_rpc.call(json.dumps(user_details))
+    print("heellloo im here134\n")
     return response
+    
     
 @app.route('/api/v1/db/clear',methods=["POST"])
 def cleardb():
-    queue_name = 'WRITE_queue'
+    '''queue_name = 'WRITE_queue'
     write_to_queue('DELETE FROM Riders')
     write_to_queue('DELETE FROM Ride')
-    write_to_queue('DELETE FROM User')
+    write_to_queue('DELETE FROM User')'''
     return {},200
     
 if __name__ == '__main__':
+    print("check1")
+    t1 = threading.Thread(target=timer, args=())
+    print("check2")
+    t1.start()
+    print("check3")
     app.run(debug=True,host='0.0.0.0',port=8000)

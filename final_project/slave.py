@@ -57,8 +57,12 @@ channel = connection.channel()
 
 channel.queue_declare(queue='rpc_queue')
 
+        
 def readfromdb(str1):
-    rs = con.execute(str1)
+    str1=str1[2:-1]
+    str1 = str1.replace('\\', '')
+    user_details=json.loads(str1)
+    rs = con.execute('SELECT '+ user_details['columns'] + ' FROM ' + user_details['table'] + ' WHERE ' + user_details['where'])
     list1=[]
     for row in rs:
         d={}
@@ -69,22 +73,25 @@ def readfromdb(str1):
             list1.append(d)
     return json.dumps(list1)
 
-def on_request(ch, method, props, body):
+def on_request(ch, method, properties, body):
     n = str(body)
     print(n)
     response = readfromdb(n)
     ch.basic_publish(exchange='',
-                     routing_key=props.reply_to,
+                     routing_key=properties.reply_to,
                      properties=pika.BasicProperties(correlation_id = \
-                                                         props.correlation_id),
+                                                         properties.correlation_id),
                      body=response)
-    ch.basic_ack(delivery_tag=method.delivery_tag)
 
-channel.basic_qos(prefetch_count=10)
-channel.basic_consume(queue='rpc_queue', on_message_callback=on_request)
+channel.basic_qos(prefetch_count=30)
+
+channel.basic_consume(queue='rpc_queue', on_message_callback=on_request,auto_ack=True)
 
 print(" [x] Awaiting RPC requests")
 channel.start_consuming()
 
 if __name__ == '__main__':
     app.run(debug=True,host='0.0.0.0',port=8000)
+
+
+
