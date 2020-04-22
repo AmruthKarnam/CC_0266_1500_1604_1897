@@ -17,9 +17,9 @@ import pika
 import sys
 import uuid
 
-connection = pika.BlockingConnection(
-pika.ConnectionParameters(host='rmq'))
-channel = connection.channel()
+#connection = pika.BlockingConnection(
+#pika.ConnectionParameters(host='rabbitmq'))
+#channel = connection.channel()
 
 
 
@@ -27,11 +27,11 @@ class OrchestratorRpcClient(object):
 
     def __init__(self):
         self.connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host='rmq'))
+            pika.ConnectionParameters(host='rabbitmq'))
 
         self.channel = self.connection.channel()
 
-        result = self.channel.queue_declare(queue='rpc_queue', exclusive=True)
+        result = self.channel.queue_declare(queue='rpc_queue')
         self.callback_queue = result.method.queue
 
         self.channel.basic_consume(
@@ -59,19 +59,9 @@ class OrchestratorRpcClient(object):
         return self.response
 
 
-#orchestrator_rpc = OrchestratorRpcClient()
+orchestrator_rpc = OrchestratorRpcClient()
 
-#print(" [x] Requesting fib(30)")
-#response = orchestrator_rpc.call(30)
-#print(" [.] Got %r" % response)
-
-
-
-
-
-
-
-def write_to_queue(queue_name,message) :
+"""def write_to_queue(queue_name,message) :
     channel.queue_declare(queue=queue_name, durable=True)
     channel.basic_publish(
         exchange='',
@@ -94,17 +84,17 @@ def writetodb():
         write_message = 'DELETE FROM ' + user_details['table'] + ' WHERE  ' + user_details['column'] + '=' '"' + user_details['value'] + '"'
         write_to_queue(queue_name,write_message)
     return "written"
+"""
 
 
 # 9
-"""@app.route('/api/v1/db/read', methods=["POST"])
+@app.route('/api/v1/db/read', methods=["POST"])
 def readfromdb():
     queue_name = 'READ_queue'
     user_details = dict(request.json)
-    #print("AJEya\n")
     read_message = 'SELECT '+ user_details['columns'] + ' FROM ' + user_details['table'] + ' WHERE ' + user_details['where']
     response = orchestrator_rpc.call(read_message)
-    return response"""
+    return response
     
 @app.route('/api/v1/db/clear',methods=["POST"])
 def cleardb():

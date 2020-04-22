@@ -51,16 +51,14 @@ Session = sessionmaker(bind=engine)
 session=Session()
 
 connection = pika.BlockingConnection(
-    pika.ConnectionParameters(host='rmq'))
+    pika.ConnectionParameters(host='rabbitmq'))
 
 channel = connection.channel()
 
 channel.queue_declare(queue='rpc_queue')
 
 def readfromdb(str1):
-    #print("AJEya\n")
     rs = con.execute(str1)
-    #print("ajeya BS")
     list1=[]
     for row in rs:
         d={}
