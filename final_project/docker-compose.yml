@@ -2,6 +2,7 @@ version: '3.1'
 
 services:
   rabbitmq:
+    container_name: "rabbitmq"
     hostname: "rabbitmq"
     ports:  
          - "15672:15672"  
@@ -11,6 +12,7 @@ services:
     image: rabbitmq:3.8.3-alpine
 
   master:
+    container_name: "master"
     build:
       context: .
       dockerfile: Dockerfile
@@ -26,6 +28,7 @@ services:
     restart: on-failure
 
   slave:
+    container_name: "slave"
     build:
         context: .
         dockerfile: Dockerfile
@@ -41,6 +44,7 @@ services:
     restart: on-failure
 
   orchestrator:
+    container_name: "orchestrator"
     build:
         context: .
         dockerfile: Dockerfile
@@ -49,6 +53,7 @@ services:
       - "8000:8000"
     volumes:
         - .:/code
+        - /var/run/docker.sock:/var/run/docker.sock
     links:
     - rabbitmq
     depends_on:

@@ -21,11 +21,14 @@ import threading
 import math
 import docker
 counter = Value('i', 0)
-spawners = 1
 #connection = pika.BlockingConnection(
 #pika.ConnectionParameters(host='rabbitmq'))
 #channel = connection.channel()
-
+client = docker.from_env()
+container = client.containers.run("final_project_slave","python slave.py")
+print("container_id:",container)
+for container in client.containers.list():
+    print(container.name)
 def http_count():
     with counter.get_lock():
         counter.value += 1
@@ -35,14 +38,12 @@ def timer():
     global counter
     while(True):
         print("hello im here\n")
-        time.sleep(5)
+        time.sleep(120)
         no_of_req = counter.value
         containers =  math.ceil(no_of_req/20)
         print("ajeya=",containers)
         if containers == 0:
             containers = 1
-        client = docker.from_env()
-        
         res=requests.delete('http://localhost:8000/api/v1/_count')
 
 @app.route('/api/v1/_count',methods=["GET"])
@@ -57,6 +58,15 @@ def http_count_reset():
     with counter.get_lock():
         counter.value = 0
     return {},200
+
+@app.route('/api/v1/worker/list',methods=["GET"])
+def list_worker():
+    pid_list = []
+    for container in client.containers.list():
+        if "slave" in container.name:
+            pid_list.append(container.id)
+    return json.dumps(sorted(pid_list)),200
+
 
 class OrchestratorRpcClient(object):
 
