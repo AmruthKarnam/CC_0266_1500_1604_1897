@@ -21,18 +21,18 @@ import threading
 import math
 import docker
 counter = Value('i', 0)
-#connection = pika.BlockingConnection(
-#pika.ConnectionParameters(host='rabbitmq'))
-#channel = connection.channel()
-#client = docker.from_env()
+connection = pika.BlockingConnection(
+pika.ConnectionParameters(host='0.0.0.0'))
+channel = connection.channel()
+client = docker.from_env()
 client = docker.DockerClient(base_url='unix://var/run/docker.sock')
-#container = client.containers.run("final_project_slave","python slave.py",links={"rabbitmq":"rabbitmq"},network="final_project_default")
+container = client.containers.run("final_project_slave","python slave.py",links={"rabbitmq":"rabbitmq"},network="final_project_default")
 
-#container = client.containers.create("final_project_slave","python slave.py")
-#container1 = client.containers.run("final_project_slave","python slave.py")
-#print("container_id:",container)
+container = client.containers.create("final_project_slave","python slave.py")
+container1 = client.containers.run("final_project_slave","python slave.py")
+print("container_id:",container)
 for container in client.containers.list():
-    print("container_id1",container.name)
+   print("container_id1",container.name)
 
 
 def http_count():
@@ -117,7 +117,7 @@ class OrchestratorRpcClient(object):
 
     def __init__(self):
         self.connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host='rabbitmq'))
+            pika.ConnectionParameters(host='0.0.0.0'))
 
         self.channel = self.connection.channel()
 
@@ -180,16 +180,13 @@ def writetodb():
 # 9
 @app.route('/api/v1/db/read', methods=["POST"])
 def readfromdb():
-    http_count()
-    print("heellloo im here12132\n")
+    #http_count()
     queue_name = 'READ_queue'
-    print("heellloo im here1341\n")
     user_details = dict(request.json)
-    print("heellloo im here1342\n")
+    print(user_details)
     read_message = 'SELECT '+ user_details['columns'] + ' FROM ' + user_details['table'] + ' WHERE ' + user_details['where']
-    print("heellloo im here1343\n")
+    print(str(user_details))
     response = orchestrator_rpc.call(json.dumps(user_details))
-    print("heellloo im here134\n")
     return response
     
     
@@ -202,11 +199,13 @@ def cleardb():
     return {},200
     
 if __name__ == '__main__':
+    
     print("check1")
     t1 = threading.Thread(target=timer, args=())
     print("check2")
     t1.start()
     print("check3")
+    
     #container = client.containers.run("final_project_slave","python slave.py",links={"rabbitmq":"rabbitmq"},network="final_project_default")
     app.run(debug=True,host='0.0.0.0',port=8000)
     

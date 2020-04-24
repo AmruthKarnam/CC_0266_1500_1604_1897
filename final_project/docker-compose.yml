@@ -19,6 +19,26 @@ services:
     command: sh -c "sleep 20 && python worker.py"
     ports:
       - "8001:8000"
+    environment:
+      - container_type=master
+    volumes:
+    - .:/code
+    links:
+    - rabbitmq
+    depends_on:
+    - rabbitmq
+    restart: on-failure
+  
+  slave:
+    container_name: "slave"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: sh -c "sleep 20 && python worker.py"
+    ports:
+      - "8002:8000"
+    environment:
+      - container_type=slave
     volumes:
     - .:/code
     links:
