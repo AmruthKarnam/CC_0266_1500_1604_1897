@@ -151,7 +151,7 @@ class OrchestratorRpcClient(object):
 
 orchestrator_rpc = OrchestratorRpcClient()
 
-"""def write_to_queue(queue_name,message) :
+def write_to_queue(queue_name,message) :
     channel.queue_declare(queue=queue_name, durable=True)
     channel.basic_publish(
         exchange='',
@@ -174,7 +174,7 @@ def writetodb():
         write_message = 'DELETE FROM ' + user_details['table'] + ' WHERE  ' + user_details['column'] + '=' '"' + user_details['value'] + '"'
         write_to_queue(queue_name,write_message)
     return "written"
-"""
+
 
 
 # 9
@@ -195,10 +195,10 @@ def readfromdb():
     
 @app.route('/api/v1/db/clear',methods=["POST"])
 def cleardb():
-    '''queue_name = 'WRITE_queue'
-    write_to_queue('DELETE FROM Riders')
-    write_to_queue('DELETE FROM Ride')
-    write_to_queue('DELETE FROM User')'''
+    queue_name = 'WRITE_queue'
+    write_to_queue(queue_name,'DELETE FROM Riders')
+    write_to_queue(queue_name,'DELETE FROM Ride')
+    write_to_queue(queue_name,'DELETE FROM User')
     return {},200
     
 if __name__ == '__main__':
