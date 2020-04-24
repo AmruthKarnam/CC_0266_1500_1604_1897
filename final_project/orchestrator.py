@@ -24,11 +24,17 @@ counter = Value('i', 0)
 #connection = pika.BlockingConnection(
 #pika.ConnectionParameters(host='rabbitmq'))
 #channel = connection.channel()
-client = docker.from_env()
-container = client.containers.run("final_project_slave","python slave.py")
-print("container_id:",container)
+#client = docker.from_env()
+client = docker.DockerClient(base_url='unix://var/run/docker.sock')
+#container = client.containers.run("final_project_slave","python slave.py",links={"rabbitmq":"rabbitmq"},network="final_project_default")
+
+#container = client.containers.create("final_project_slave","python slave.py")
+#container1 = client.containers.run("final_project_slave","python slave.py")
+#print("container_id:",container)
 for container in client.containers.list():
-    print(container.name)
+    print("container_id1",container.name)
+
+
 def http_count():
     with counter.get_lock():
         counter.value += 1
@@ -38,13 +44,24 @@ def timer():
     global counter
     while(True):
         print("hello im here\n")
-        time.sleep(120)
         no_of_req = counter.value
         containers =  math.ceil(no_of_req/20)
         print("ajeya=",containers)
         if containers == 0:
             containers = 1
+        res1 = requests.get("http://localhost:8000/api/v1/worker/list")
+        length = len(res1.json())
+
+        if length>containers:
+            for i in range(length-containers):
+                requests.post("http://localhost:8000/api/v1/crash/slave")
+            client.containers.prune()
+            res1=requests.get("http://localhost:8000/api/v1/worker/list")
+            print("after pruning = ",len(res1.json()))
+
+             
         res=requests.delete('http://localhost:8000/api/v1/_count')
+        time.sleep(1200)
 
 @app.route('/api/v1/_count',methods=["GET"])
 def http_count1():
@@ -66,6 +83,34 @@ def list_worker():
         if "slave" in container.name:
             pid_list.append(container.id)
     return json.dumps(sorted(pid_list)),200
+
+@app.route('/api/v1/crash/master',methods=["POST"])
+def crash_master():
+    for container in client.containers.list():
+        if "master" in container.name:
+            container.stop()
+            client.containers.prune()
+    for container in client.containers.list():
+        print("container_id2:",container.name)
+    return {},200
+
+
+@app.route('/api/v1/crash/slave',methods=["POST"])
+def crash_slave():
+    #print("something Start\n")
+    res1 = requests.get("http://localhost:8000/api/v1/worker/list")
+    l = res1.json()
+    #print("list is = ",l)
+    if(len(l)>1):
+        delete_id = l[-1]
+        #print("the delete id = ",delete_id)
+        for container in client.containers.list():
+            if container.id==delete_id:
+                #print("something inside\n")
+                container.stop()
+        #for container in client.containers.list():
+            #print("container_id2:",container.name)
+    return {},200
 
 
 class OrchestratorRpcClient(object):
@@ -162,4 +207,6 @@ if __name__ == '__main__':
     print("check2")
     t1.start()
     print("check3")
+    #container = client.containers.run("final_project_slave","python slave.py",links={"rabbitmq":"rabbitmq"},network="final_project_default")
     app.run(debug=True,host='0.0.0.0',port=8000)
+    
