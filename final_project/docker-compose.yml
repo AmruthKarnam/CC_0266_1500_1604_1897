@@ -16,7 +16,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: sh -c "sleep 20 && python master.py"
+    command: sh -c "sleep 20 && python worker.py"
     ports:
       - "8001:8000"
     volumes:
@@ -27,85 +27,7 @@ services:
     - rabbitmq
     restart: on-failure
 
-  slave:
-    container_name: "slave"
-    build:
-        context: .
-        dockerfile: Dockerfile
-    command: sh -c "sleep 15 && python slave.py"
-    ports:
-      - "8002:8000"
-    volumes:
-    - .:/code
-    links:
-    - rabbitmq
-    depends_on:
-    - rabbitmq
-    restart: on-failure
   
-  slave2:
-    container_name: "slave2"
-    build:
-        context: .
-        dockerfile: Dockerfile
-    command: sh -c "sleep 15 && python slave.py"
-    ports:
-      - "8005:8000"
-    volumes:
-    - .:/code
-    links:
-    - rabbitmq
-    depends_on:
-    - rabbitmq
-    restart: on-failure
-
-  slave3:
-    container_name: "slave3"
-    build:
-        context: .
-        dockerfile: Dockerfile
-    command: sh -c "sleep 15 && python slave.py"
-    ports:
-      - "8006:8000"
-    volumes:
-    - .:/code
-    links:
-    - rabbitmq
-    depends_on:
-    - rabbitmq
-    restart: on-failure
-
-  slave4:
-    container_name: "slave4"
-    build:
-        context: .
-        dockerfile: Dockerfile
-    command: sh -c "sleep 15 && python slave.py"
-    ports:
-      - "8007:8000"
-    volumes:
-    - .:/code
-    links:
-    - rabbitmq
-    depends_on:
-    - rabbitmq
-    restart: on-failure
-
-  slave5:
-    container_name: "slave5"
-    build:
-        context: .
-        dockerfile: Dockerfile
-    command: sh -c "sleep 15 && python slave.py"
-    ports:
-      - "8008:8000"
-    volumes:
-    - .:/code
-    links:
-    - rabbitmq
-    depends_on:
-    - rabbitmq
-    restart: on-failure
 
 
   orchestrator:
