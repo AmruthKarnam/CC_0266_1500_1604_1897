@@ -1,6 +1,5 @@
 from flask import Flask, render_template, jsonify, request, abort, g,request
 import requests
-#import sqlite3
 #import status
 from werkzeug.exceptions import BadRequest
 #from models import sessions
@@ -34,12 +33,7 @@ channel = connection.channel()
 client1 = docker.APIClient(base_url='unix://var/run/docker.sock')
 client = docker.DockerClient(base_url='unix://var/run/docker.sock')
 count=0
-varname="slaveno"+str(count)
-container = client.containers.run("final_project_slave","python slave.py",links={"rabbitmq":"rabbitmq"},network="final_project_default",detach=True,name=varname)
-count+=1
 
-#container = client.containers.create("final_project_slave","python slave.py")
-#container = client.containers.run("final_project_slave","python slave.py")
 #print("container_id:",container)
 for container in client.containers.list():
    print("container_id1:",container.name)
@@ -80,7 +74,8 @@ def demo_func(event):
     print("Event=",event)
     children = zk.get_children("/producer")
     print(" %s children with names %s" % (len(children), children))
-children = zk.get_children("/producer", watch=demo_func)
+
+#children = zk.get_children("/producer", watch=demo_func)
 print("There are %s children with names %s" % (len(children), children))
 zk.delete("/producer", recursive=True)
 # Both these statements return immediately, the second sets a callback
@@ -130,13 +125,25 @@ if not zk.connected:
    raise Exception
 # List the children"""
 
+def createContainer():
+	global count
+	varname="slave"+str(count)
+	container = client.containers.run("final_project_slave","python slave.py",links={"rabbitmq":"rabbitmq"},network="final_project_default",detach=True)
+	flag=0
+	for container in client.containers.list():
+		if '_' in container.name and flag==0:
+			container.stop()
+			flag=1
+		elif '_' in container.name and flag==1:
+			container.rename(varname)
+			count+=1
+
 
 def http_count():
     with counter.get_lock():
         counter.value += 1
 
 def timer():
-    print("hmm\n")
     global counter
     while(True):
         print("hello im here\n")
@@ -147,15 +154,16 @@ def timer():
             containers = 1
         res1 = requests.get("http://localhost:8000/api/v1/worker/list")
         length = len(res1.json())
-
         if length>containers:
             for i in range(length-containers):
                 requests.post("http://localhost:8000/api/v1/crash/slave")
             client.containers.prune()
             res1=requests.get("http://localhost:8000/api/v1/worker/list")
             print("after pruning = ",len(res1.json()))
-
-             
+		elif length<containers:
+			for i in range(containers-length):
+				createContainer()
+				print("now executed")         
         res=requests.delete('http://localhost:8000/api/v1/_count')
         time.sleep(1200)
 
@@ -175,7 +183,6 @@ def http_count_reset():
 @app.route('/api/v1/worker/list',methods=["GET"])
 def list_worker():
     pid_list = []
-    
     for container in client.containers.list():
         print(client1.inspect_container(container.id)['State']['Pid'])
         if "slave" in container.name:
