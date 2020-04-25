@@ -24,7 +24,6 @@ import threading
 import math
 import docker
 from kazoo.client import KazooClient
-from kazoo.handlers.gevent import SequentialGeventHandler
 import sys
 counter = Value('i', 0)
 connection = pika.BlockingConnection(
@@ -38,7 +37,7 @@ count=0
 for container in client.containers.list():
    print("container_id1:",container.name)
 print("before client")
-zk = KazooClient(hosts='zookeeper:2181',handler=SequentialGeventHandler())
+zk = KazooClient(hosts='zookeeper:2181')
 print("after client")
 # returns immediately
 event = zk.start_async()
@@ -131,12 +130,12 @@ def createContainer():
 	container = client.containers.run("final_project_slave","python slave.py",links={"rabbitmq":"rabbitmq"},network="final_project_default",detach=True)
 	flag=0
 	for container in client.containers.list():
-		if '_' in container.name and flag==0:
-			container.stop()
-			flag=1
-		elif '_' in container.name and flag==1:
-			container.rename(varname)
-			count+=1
+                if '_' in container.name and flag==0:
+                        container.stop()
+                        flag=1
+                elif '_' in container.name and flag==1:
+                        container.rename(varname)
+                        count+=1
 
 
 def http_count():
@@ -160,10 +159,10 @@ def timer():
             client.containers.prune()
             res1=requests.get("http://localhost:8000/api/v1/worker/list")
             print("after pruning = ",len(res1.json()))
-		elif length<containers:
-			for i in range(containers-length):
-				createContainer()
-				print("now executed")         
+        elif length<containers:
+            for i in range(containers-length):
+                createContainer()
+                print("now executed")         
         res=requests.delete('http://localhost:8000/api/v1/_count')
         time.sleep(1200)
 
