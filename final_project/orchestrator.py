@@ -11,6 +11,8 @@ from sqlalchemy.orm import sessionmaker
 from kazoo.exceptions import ConnectionLossException
 from kazoo.exceptions import NoAuthException
 import random
+from kazoo.exceptions import ConnectionLossException
+from kazoo.exceptions import NoAuthException
 from datetime import datetime
 from multiprocessing import Value
 import time
@@ -22,26 +24,25 @@ import uuid
 import threading
 import math
 import docker
+from kazoo.client import KazooClient
+from kazoo.handlers.gevent import SequentialGeventHandler
+import sys
 counter = Value('i', 0)
 connection = pika.BlockingConnection(
 pika.ConnectionParameters(host='rabbitmq'))
 channel = connection.channel()
-client = docker.from_env()
+client1 = docker.APIClient(base_url='unix://var/run/docker.sock')
 client = docker.DockerClient(base_url='unix://var/run/docker.sock')
-#container = client.containers.run("final_project_slave","python slave.py",links={"rabbitmq":"rabbitmq"},network="final_project_default")
+count=0
+varname="slaveno"+str(count)
+container = client.containers.run("final_project_slave","python slave.py",links={"rabbitmq":"rabbitmq"},network="final_project_default",detach=True,name=varname)
+count+=1
 
 #container = client.containers.create("final_project_slave","python slave.py")
-#container1 = client.containers.run("final_project_slave","python slave.py")
+#container = client.containers.run("final_project_slave","python slave.py")
 #print("container_id:",container)
-#for container in client.containers.list():
-#   print("container_id1:",container.name)
-
-from kazoo.client import KazooClient
-from kazoo.handlers.gevent import SequentialGeventHandler
-import sys
-
-from kazoo.exceptions import ConnectionLossException
-from kazoo.exceptions import NoAuthException
+for container in client.containers.list():
+   print("container_id1:",container.name)
 print("before client")
 zk = KazooClient(hosts='zookeeper:2181',handler=SequentialGeventHandler())
 print("after client")
@@ -176,7 +177,7 @@ def list_worker():
     pid_list = []
     
     for container in client.containers.list():
-        print(client.inspect_container(container.id))
+        print(client1.inspect_container(container.id)['State']['Pid'])
         if "slave" in container.name:
             pid_list.append(container.id)
     return json.dumps(sorted(pid_list)),200
