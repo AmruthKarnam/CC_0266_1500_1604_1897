@@ -92,7 +92,7 @@ def on_request(ch, method, properties, body):
 
 def writer():
     connection = pika.BlockingConnection(
-    pika.ConnectionParameters(host='0.0.0.0'))
+    pika.ConnectionParameters(host='rabbitmq'))
     channel = connection.channel()
     channel.queue_declare(queue='WRITE_queue', durable=True)
     channel.basic_qos(prefetch_count=30)
@@ -102,7 +102,7 @@ def writer():
 
 def reader():
     connection = pika.BlockingConnection(
-    pika.ConnectionParameters(host='0.0.0.0'))
+    pika.ConnectionParameters(host='rabbitmq'))
     channel = connection.channel()
     channel.queue_declare(queue='rpc_queue')
     channel.basic_qos(prefetch_count=30)

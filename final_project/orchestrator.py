@@ -8,6 +8,8 @@ app = Flask(__name__)
 from sqlalchemy import create_engine, Sequence
 from sqlalchemy import String, Integer, Float, Boolean, Column, ForeignKey, DateTime
 from sqlalchemy.orm import sessionmaker
+from kazoo.exceptions import ConnectionLossException
+from kazoo.exceptions import NoAuthException
 import random
 from datetime import datetime
 from multiprocessing import Value
@@ -22,17 +24,110 @@ import math
 import docker
 counter = Value('i', 0)
 connection = pika.BlockingConnection(
-pika.ConnectionParameters(host='0.0.0.0'))
+pika.ConnectionParameters(host='rabbitmq'))
 channel = connection.channel()
 client = docker.from_env()
 client = docker.DockerClient(base_url='unix://var/run/docker.sock')
-container = client.containers.run("final_project_slave","python slave.py",links={"rabbitmq":"rabbitmq"},network="final_project_default")
+#container = client.containers.run("final_project_slave","python slave.py",links={"rabbitmq":"rabbitmq"},network="final_project_default")
 
-container = client.containers.create("final_project_slave","python slave.py")
-container1 = client.containers.run("final_project_slave","python slave.py")
-print("container_id:",container)
-for container in client.containers.list():
-   print("container_id1",container.name)
+#container = client.containers.create("final_project_slave","python slave.py")
+#container1 = client.containers.run("final_project_slave","python slave.py")
+#print("container_id:",container)
+#for container in client.containers.list():
+#   print("container_id1:",container.name)
+
+from kazoo.client import KazooClient
+from kazoo.handlers.gevent import SequentialGeventHandler
+import sys
+
+from kazoo.exceptions import ConnectionLossException
+from kazoo.exceptions import NoAuthException
+print("before client")
+zk = KazooClient(hosts='zookeeper:2181',handler=SequentialGeventHandler())
+print("after client")
+# returns immediately
+event = zk.start_async()
+print("after start")
+# Wait for 30 seconds and see if we're connected
+event.wait(timeout=20)
+print("after wait")
+if not zk.connected:
+    # Not connected, stop trying to connect
+    zk.stop()
+    raise Exception("Unable to connect.")
+
+print("after function")
+zk.delete("/producer", recursive=True)
+zk.ensure_path("/producer")
+if zk.exists("/producer/node_1"):
+    print("Node already exists")
+else:
+    print("in else")
+    zk.create("/producer/node_1", b"demo producer node")
+data, stat = zk.get("/producer/node_1")
+print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
+zk.create("/producer/node_3", b"demo producer node")
+@zk.ChildrenWatch('/producer')
+def demo_func(event):
+    print("inside demo_func")
+    # Create a node with data
+    if zk.exists("/producer/node_2"):
+        print("Hello World")
+    else:
+        print("something else")
+        zk.ensure_path("/producer/node_2")
+    print("Event=",event)
+    children = zk.get_children("/producer")
+    print(" %s children with names %s" % (len(children), children))
+children = zk.get_children("/producer", watch=demo_func)
+print("There are %s children with names %s" % (len(children), children))
+zk.delete("/producer", recursive=True)
+# Both these statements return immediately, the second sets a callback
+# that will be run when get_children_async has its return value
+#async_obj = zk.get_children_async("/")
+#async_obj.rawlink(my_callback)
+
+"""import logging
+
+from kazoo.client import KazooClient
+from kazoo.handlers.gevent import SequentialGeventHandler
+from kazoo.client import KazooState
+print("before client")
+zk = KazooClient(hosts='zookeeper:2181',handler=SequentialGeventHandler())
+print("after client")
+zk.start()
+print("after start")
+def my_listener(state):
+    print("into function")
+    if state == KazooState.LOST:
+        print("STATE:",state)
+    elif state == KazooState.SUSPENDED:
+        print("STATE:",state)
+    else:
+        print("STATE",state)
+
+zk.add_listener(my_listener)
+print("after listner")
+zk.stop()"""
+"""zk = KazooClient(hosts="zookeeper:2181",handler=SequentialGeventHandler())
+# returns immediately
+event = zk.start_async()
+# Can also use the @DataWatch and @ChildrenWatch decorators for the same
+def my_callback(async_obj):
+    try:
+        children = async_obj.get()
+        print("something")
+    except (ConnectionLossException, NoAuthException):
+        sys.exit(1)
+async_obj = zk.get_children_async("producer")
+async_obj.rawlink(my_callback)
+zk.create_async("/producer",b'producer')
+zk.create_async("/producer/node1",b"child1")
+zk.create_async("/producer/node2",b"child2")
+event.wait(timeout=10)
+if not zk.connected:
+   raise Exception
+# List the children"""
 
 
 def http_count():
@@ -117,7 +212,7 @@ class OrchestratorRpcClient(object):
 
     def __init__(self):
         self.connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host='0.0.0.0'))
+            pika.ConnectionParameters(host='rabbitmq'))
 
         self.channel = self.connection.channel()
 
