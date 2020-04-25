@@ -131,20 +131,28 @@ if not zk.connected:
 def zknormal(length,res1):
     res2=requests.get("http://localhost:8000/api/v1/master/list")
     result=res2.json()
+
     strmaster="master,"+str(result[0])
+    print("strmaster:",strmaster)
     strmaster1=bytes(strmaster, 'ascii')
     countz=0
     varn="slave"+str(countz)
     zk.delete("/producer", recursive=True)
     zk.ensure_path("/producer")
+    print("length is",length)
     for i in range(0,length):
         strres="slave,"+str(res1[i])
         strres1=bytes(strres, 'ascii')
-        print(strres)
+        print("strres:",strres)
         zk.create("/producer/node_"+varn, strres1)
+        data, stat = zk.get("/producer/node_"+varn)
+        print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
         countz+=1
 
     zk.create("/producer/node_master", strmaster1)
+    data, stat = zk.get("/producer/node_master")
+    print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
+
     
 
 def createContainer():
