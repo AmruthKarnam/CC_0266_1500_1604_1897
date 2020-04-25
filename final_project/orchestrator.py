@@ -38,6 +38,10 @@ for container in client.containers.list():
    print("container_id1:",container.name)
 print("before client")
 zk = KazooClient(hosts='zookeeper:2181')
+zk.start()
+
+print("after function")
+'''zk = KazooClient(hosts='zookeeper:2181')
 print("after client")
 # returns immediately
 event = zk.start_async()
@@ -81,7 +85,7 @@ zk.delete("/producer", recursive=True)
 # that will be run when get_children_async has its return value
 #async_obj = zk.get_children_async("/")
 #async_obj.rawlink(my_callback)
-
+'''
 """import logging
 
 from kazoo.client import KazooClient
@@ -124,6 +128,25 @@ if not zk.connected:
    raise Exception
 # List the children"""
 
+def zknormal(length,res1):
+    res2=requests.get("http://localhost:8000/api/v1/master/list")
+    result=res2.json()
+    strmaster="master,"+str(result[0])
+    strmaster1=bytes(strmaster, 'ascii')
+    countz=0
+    varn="slave"+str(countz)
+    zk.delete("/producer", recursive=True)
+    zk.ensure_path("/producer")
+    for i in range(0,length):
+        strres="slave,"+str(res1[i])
+        strres1=bytes(strres, 'ascii')
+        print(strres)
+        zk.create("/producer/node_"+varn, strres1)
+        countz+=1
+
+    zk.create("/producer/node_master", strmaster1)
+    
+
 def createContainer():
 	global count
 	varname="slave"+str(count)
@@ -162,9 +185,11 @@ def timer():
         elif length<containers:
             for i in range(containers-length):
                 createContainer()
-                print("now executed")         
+                print("now executed")
+        zknormal(containers,res1.json())
+
         res=requests.delete('http://localhost:8000/api/v1/_count')
-        time.sleep(1200)
+        time.sleep(120)
 
 @app.route('/api/v1/_count',methods=["GET"])
 def http_count1():
@@ -179,13 +204,22 @@ def http_count_reset():
         counter.value = 0
     return {},200
 
+@app.route('/api/v1/master/list',methods=["GET"])
+def list_master():
+    pid_list = []
+    for container in client.containers.list():
+        if "master" in container.name:
+            temp=client1.inspect_container(container.id)['State']['Pid']
+            pid_list.append(temp)
+    return json.dumps(sorted(pid_list)),200
+
 @app.route('/api/v1/worker/list',methods=["GET"])
 def list_worker():
     pid_list = []
     for container in client.containers.list():
-        print(client1.inspect_container(container.id)['State']['Pid'])
         if "slave" in container.name:
-            pid_list.append(container.id)
+            temp=client1.inspect_container(container.id)['State']['Pid']
+            pid_list.append(temp)
     return json.dumps(sorted(pid_list)),200
 
 @app.route('/api/v1/crash/master',methods=["POST"])
