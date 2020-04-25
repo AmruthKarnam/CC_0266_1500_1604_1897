@@ -174,7 +174,9 @@ def http_count_reset():
 @app.route('/api/v1/worker/list',methods=["GET"])
 def list_worker():
     pid_list = []
+    
     for container in client.containers.list():
+        print(client.inspect_container(container.id))
         if "slave" in container.name:
             pid_list.append(container.id)
     return json.dumps(sorted(pid_list)),200

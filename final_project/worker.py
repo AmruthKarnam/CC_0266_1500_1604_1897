@@ -14,6 +14,8 @@ from datetime import datetime
 import csv
 import json
 import threading
+import pika
+import sys
 import os
 
 from sqlalchemy.ext.declarative import declarative_base
@@ -50,9 +52,47 @@ Session = sessionmaker(bind=engine)
 session=Session()
 
 
+
+def callbackForSync(ch, method, properties, body):
+        print("the body is =",body)
+        print("the first chara is =",body[0])
+        print("the last chara is =",body[-1])
+        print("type = ",type(body))
+        body=str(body)
+        print("after string",body)
+        body=body[2:-1]
+        print("after string",body)
+        #body=body[1:]
+        print("THe slave is recieving =",body)
+        con.execute(body)
+
+def syncHere():
+    connection = pika.BlockingConnection(
+    pika.ConnectionParameters(host='rabbitmq'))
+    channel = connection.channel()
+    channel.exchange_declare(exchange='logs', exchange_type='fanout')
+    result = channel.queue_declare(queue='sync_queue')
+    queue_name = result.method.queue
+    channel.queue_bind(exchange='logs', queue="sync_queue")
+    print(' [*] Waiting for logs. To exit press CTRL+C')
+    channel.basic_consume(
+        queue=queue_name, on_message_callback=callbackForSync, auto_ack=True)
+    channel.start_consuming()
+
+def writeToSyncQueue(str1):
+    connection = pika.BlockingConnection(
+    pika.ConnectionParameters(host='rabbitmq'))
+    channel = connection.channel()
+    channel.exchange_declare(exchange='logs', exchange_type='fanout')
+    channel.basic_publish(exchange='logs', routing_key="sync_queue", body=str1)
+    print(" [x] Sent %r" %str1)
+    connection.close()
+
+
 def writetodb(str1):
     str1 = str1[2:-1]
     con.execute(str1)
+    writeToSyncQueue(str1)
 
 
 def callback(ch, method, properties, body):
@@ -115,12 +155,11 @@ def reader():
 
 if __name__ == '__main__':
     t1 = threading.Thread(target=writer, args=())
-    #t1.start()
     t2 = threading.Thread(target=reader, args=())
-    #t2.start()
+    t3=threading.Thread(target=syncHere,args=())
     if os.environ["container_type"] == "master" :
         t1.start()
     else :
         t2.start()
-        
-    app.run(debug=True,host='0.0.0.0',port=8000)
+        t3.start()
+    app.run(debug=True,host='0.0.0.0',port=8080)
