@@ -32,7 +32,7 @@ channel = connection.channel()
 client1 = docker.APIClient(base_url='unix://var/run/docker.sock')
 client = docker.DockerClient(base_url='unix://var/run/docker.sock')
 count=0
-
+countZookeeper=0
 #print("container_id:",container)
 for container in client.containers.list():
    print("container_id1:",container.name)
@@ -129,27 +129,26 @@ if not zk.connected:
 # List the children"""
 
 def zknormal(length,res1):
+    global countZookeeper
     res2=requests.get("http://localhost:8000/api/v1/master/list")
     result=res2.json()
-
     strmaster="master,"+str(result[0])
     print("strmaster:",strmaster)
     strmaster1=bytes(strmaster, 'ascii')
-    countz=0
-    varn="slave"+str(countz)
     zk.delete("/producer", recursive=True)
     zk.ensure_path("/producer")
     print("length is",length)
     for i in range(0,length):
+        varn="slave"+str(countZookeeper)
         strres="slave,"+str(res1[i])
         strres1=bytes(strres, 'ascii')
         print("strres:",strres)
-        zk.create("/producer/node_"+varn, strres1)
+        zk.create("/producer/node_"+varn, strres1,ephemeral=True)
         data, stat = zk.get("/producer/node_"+varn)
         print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
-        countz+=1
+        countZookeeper+=1
 
-    zk.create("/producer/node_master", strmaster1)
+    zk.create("/producer/node_master", strmaster1,ephemeral=True)
     data, stat = zk.get("/producer/node_master")
     print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
 
@@ -163,6 +162,7 @@ def createContainer():
 	for container in client.containers.list():
                 if '_' in container.name and flag==0:
                         container.stop()
+                        #container.remove()
                         flag=1
                 elif '_' in container.name and flag==1:
                         container.rename(varname)
@@ -194,8 +194,8 @@ def timer():
             for i in range(containers-length):
                 createContainer()
                 print("now executed")
-        zknormal(containers,res1.json())
-
+        r=requests.get("http://localhost:8000/api/v1/worker/list")
+        zknormal(containers,r.json())
         res=requests.delete('http://localhost:8000/api/v1/_count')
         time.sleep(120)
 
@@ -203,7 +203,6 @@ def timer():
 def http_count1():
     list1 = []
     list1.append(counter.value)
-
     return json.dumps(list1),200
 
 @app.route('/api/v1/_count',methods=["DELETE"])
@@ -232,28 +231,38 @@ def list_worker():
 
 @app.route('/api/v1/crash/master',methods=["POST"])
 def crash_master():
+    slavecount=0
     for container in client.containers.list():
         if "master" in container.name:
             container.stop()
+            #container.remove()
             client.containers.prune()
     for container in client.containers.list():
+        if "slave" in container.name:
+            slavecount+=1
         print("container_id2:",container.name)
+    children = zk.get_children("/producer")
+    print("Children are:",children)
+
+    if slavecount==1:
+        createContainer()
     return {},200
 
 
 @app.route('/api/v1/crash/slave',methods=["POST"])
 def crash_slave():
-    #print("something Start\n")
+    print("something Start\n")
     res1 = requests.get("http://localhost:8000/api/v1/worker/list")
     l = res1.json()
-    #print("list is = ",l)
+    print("list is = ",l)
     if(len(l)>1):
         delete_id = l[-1]
-        #print("the delete id = ",delete_id)
+        print("the delete id = ",delete_id)
         for container in client.containers.list():
             if container.id==delete_id:
-                #print("something inside\n")
+                print("something inside\n")
                 container.stop()
+                #container.remove()
         #for container in client.containers.list():
             #print("container_id2:",container.name)
     return {},200
