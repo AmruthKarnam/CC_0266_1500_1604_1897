@@ -34,6 +34,15 @@ def list_master():
             pid_list.append(temp)
     return sorted(pid_list)
 
+zk = KazooClient(hosts='zookeeper:2181')
+zk.start()
+result = list_master()
+strmaster="slave,"+str(result[0])
+print("strslave:",strmaster)
+strmaster1=bytes(strmaster, 'ascii')
+zk.create("/zookeeper/node_slave", strmaster1,ephemeral=True,sequence=True)
+
+
 class User(Base):
     __tablename__ = 'User'
     username = Column(String(8080), primary_key=True)
@@ -167,7 +176,7 @@ def reader():
 
 
 if __name__ == '__main__':
-    result = list_master()
+    """result = list_master()
     t1 = threading.Thread(target=writer, args=())
     t2 = threading.Thread(target=reader, args=())
     t3=threading.Thread(target=syncHere,args=())
@@ -175,14 +184,16 @@ if __name__ == '__main__':
         strmaster="master,"+str(result[0])
         print("strmaster:",strmaster)
         strmaster1=bytes(strmaster, 'ascii')
-        zk = KazooClient(hosts='zookeeper:2181')
-        zk.start()
         zk.delete("/zookeeper/node_master", recursive=True)
         zk.create("/zookeeper/node_master", strmaster1,ephemeral=True)
         data, stat = zk.get("/zookeeper/node_master")
         print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
         t1.start()
     else :
+        strmaster="slave,"+str(result[0])
+        print("strslave:",strmaster)
+        strmaster1=bytes(strmaster, 'ascii')
+        zk.create("/zookeeper/node_slave", strmaster1,ephemeral=True,sequence=True)
         t2.start()
-        t3.start()
+        t3.start()"""
     app.run(debug=True,host='0.0.0.0',port=8000)

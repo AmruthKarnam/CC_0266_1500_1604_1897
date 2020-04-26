@@ -129,19 +129,26 @@ if not zk.connected:
 # List the children
 """
 
+zk.ensure_path("/zookeeper")
+        
+@zk.ChildrenWatch('/zookeeper')
+def leader_election(event):
+    print("inside watch",event)
+    if zk.exists("/zookeeper"):
+        children_list = zk.get_children("/zookeeper")
+        print("Children:",children_list)
+    else:
+        zk.ensure_path("/zookeeper")
+
+
 def zknormal(length,res1):
     global countZookeeper
-    res2=requests.get("http://localhost:8000/api/v1/master/list")
-    result=res2.json()
-    strmaster="master,"+str(result[0])
-    print("strmaster:",strmaster)
-    strmaster1=bytes(strmaster, 'ascii')
     if zk.exists("/zookeeper"):
         print("Node already exists")
     else:
         print("in else")
         zk.ensure_path("/zookeeper")
-    print("length is",length)
+    """print("length is",length)
     for i in range(0,length):
         varn="slave"+str(countZookeeper)
         strres="slave,"+str(res1[i])
@@ -153,39 +160,45 @@ def zknormal(length,res1):
             print("in else")
             zk.create("/zookeeper/node_"+varn, strres1,ephemeral=True)
         data, stat = zk.get("/zookeeper/node_"+varn)
-        print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
-        countZookeeper+=1
+        print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))"""
+    countZookeeper+=1
 
-    if zk.exists("/zookeeper/node_master"):
+    """if zk.exists("/zookeeper/node_master"):
         print("Node already exists")
     else:
         print("in else")
         zk.create("/zookeeper/node_master", strmaster1,ephemeral=True)
     data, stat = zk.get("/zookeeper/node_master")
-    print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
+    print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))"""
 
     
 
-def createContainer(container):
-	global count
-	varname="slave"+str(count)
-	container = client.containers.run("final_project_slave","python worker.py",links={"rabbitmq":"rabbitmq"},network="final_project_default",detach=True)
-        countc = 0
-        for _ in client.containers.list():
-            countc+=1
-        if container+2=countc:
-
-	    flag=0
-	    for container in client.containers.list():
+def createContainer(containers):
+    global count
+    varname="slave"+str(count)
+    container = client.containers.run("final_project_slave","python worker.py",links={"rabbitmq":"rabbitmq"},network="final_project_default",detach=True)
+    countc = 0
+    for _ in client.containers.list():
+        countc+=1
+    if containers+2==countc:
+        flag=0
+        for container in client.containers.list():
                     if '_' in container.name and flag==0:
                             print("inside if contaner")
                             container.stop()
                             #container.remove()
                             flag=1
                     elif '_' in container.name and flag==1:
-                         print("inside else container")
-                            container.rename(varname)
+                        print("inside else container")
+                        container.rename(varname)
                         count+=1
+    else:
+        for container in client.containers.list():
+            if '_' in container.name:
+                print("inside for container")
+                container.rename(varname)
+                count+=1
+
 
 
 def http_count():
@@ -211,12 +224,12 @@ def timer():
             print("after pruning = ",len(res1.json()))
         elif length<containers:
             for i in range(containers-length):
-                createContainer()
+                createContainer(i+length)
                 print("now executed")
         r=requests.get("http://localhost:8000/api/v1/worker/list")
         print("RJSON:",r.json())
         print("CONTAINERS:",length,",",containers)
-        zknormal(containers,r.json())
+        #zknormal(containers,r.json())
         res=requests.delete('http://localhost:8000/api/v1/_count')
         time.sleep(60)
 
@@ -271,7 +284,7 @@ def crash_master():
         print(i)
     
     if slavecount==1:
-        createContainer()
+        createContainer(0)
     return {},200
 
 
