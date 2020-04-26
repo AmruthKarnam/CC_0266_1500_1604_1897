@@ -149,7 +149,7 @@ def zknormal(length,res1):
 def createContainer():
 	global count
 	varname="slave"+str(count)
-	container = client.containers.run("final_project_slave","python slave.py",links={"rabbitmq":"rabbitmq"},network="final_project_default",detach=True)
+	container = client.containers.run("final_project_slave","python worker.py",links={"rabbitmq":"rabbitmq"},network="final_project_default",detach=True)
 	flag=0
 	for container in client.containers.list():
                 if '_' in container.name and flag==0:
@@ -257,7 +257,7 @@ def crash_slave():
         delete_id = l[-1]
         print("the delete id = ",delete_id)
         for container in client.containers.list():
-            if container.id==delete_id:
+            if client1.inspect_container(container.id)["State"]["Pid"]==delete_id:
                 print("something inside\n")
                 container.stop()
                 #container.remove()

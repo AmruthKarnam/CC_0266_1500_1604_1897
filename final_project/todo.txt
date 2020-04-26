@@ -1,7 +1,0 @@
-zookeeper
-	leader election
-	znode creation and deltion
-	check if only slave
-
-os environ when master changes
-possible vulnerabilities?
