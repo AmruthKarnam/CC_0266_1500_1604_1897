@@ -130,7 +130,12 @@ if not zk.connected:
 
 def zknormal(length,res1):
     global countZookeeper
-
+    res2=requests.get("http://localhost:8000/api/v1/master/list")
+    result=res2.json()
+    strmaster="master,"+str(result[0])
+    print("strmaster:",strmaster)
+    strmaster1=bytes(strmaster, 'ascii')
+    zk.delete("/zookeeper", recursive=True)
     zk.ensure_path("/zookeeper")
     print("length is",length)
     for i in range(0,length):
@@ -138,11 +143,14 @@ def zknormal(length,res1):
         strres="slave,"+str(res1[i])
         strres1=bytes(strres, 'ascii')
         print("strres:",strres)
-        zk.delete("/zookeeper/node_"+varn, recursive=True)
         zk.create("/zookeeper/node_"+varn, strres1,ephemeral=True)
         data, stat = zk.get("/zookeeper/node_"+varn)
         print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
         countZookeeper+=1
+
+    zk.create("/zookeeper/node_master", strmaster1,ephemeral=True)
+    data, stat = zk.get("/zookeeper/node_master")
+    print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
 
     
 
@@ -189,7 +197,6 @@ def timer():
         r=requests.get("http://localhost:8000/api/v1/worker/list")
         zknormal(containers,r.json())
         res=requests.delete('http://localhost:8000/api/v1/_count')
-        #zk.delete("/zookeeper", recursive=True)
         time.sleep(120)
 
 @app.route('/api/v1/_count',methods=["GET"])
