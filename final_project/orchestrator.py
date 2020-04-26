@@ -55,32 +55,32 @@ if not zk.connected:
     raise Exception("Unable to connect.")
 
 print("after function")
-zk.delete("/producer", recursive=True)
-zk.ensure_path("/producer")
-if zk.exists("/producer/node_1"):
+zk.delete("/zookeeper", recursive=True)
+zk.ensure_path("/zookeeper")
+if zk.exists("/zookeeper/node_1"):
     print("Node already exists")
 else:
     print("in else")
-    zk.create("/producer/node_1", b"demo producer node")
-data, stat = zk.get("/producer/node_1")
+    zk.create("/zookeeper/node_1", b"demo zookeeper node")
+data, stat = zk.get("/zookeeper/node_1")
 print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
-zk.create("/producer/node_3", b"demo producer node")
-@zk.ChildrenWatch('/producer')
+zk.create("/zookeeper/node_3", b"demo zookeeper node")
+@zk.ChildrenWatch('/zookeeper')
 def demo_func(event):
     print("inside demo_func")
     # Create a node with data
-    if zk.exists("/producer/node_2"):
+    if zk.exists("/zookeeper/node_2"):
         print("Hello World")
     else:
         print("something else")
-        zk.ensure_path("/producer/node_2")
+        zk.ensure_path("/zookeeper/node_2")
     print("Event=",event)
-    children = zk.get_children("/producer")
+    children = zk.get_children("/zookeeper")
     print(" %s children with names %s" % (len(children), children))
 
-#children = zk.get_children("/producer", watch=demo_func)
+#children = zk.get_children("/zookeeper", watch=demo_func)
 print("There are %s children with names %s" % (len(children), children))
-zk.delete("/producer", recursive=True)
+zk.delete("/zookeeper", recursive=True)
 # Both these statements return immediately, the second sets a callback
 # that will be run when get_children_async has its return value
 #async_obj = zk.get_children_async("/")
@@ -118,11 +118,11 @@ def my_callback(async_obj):
         print("something")
     except (ConnectionLossException, NoAuthException):
         sys.exit(1)
-async_obj = zk.get_children_async("producer")
+async_obj = zk.get_children_async("zookeeper")
 async_obj.rawlink(my_callback)
-zk.create_async("/producer",b'producer')
-zk.create_async("/producer/node1",b"child1")
-zk.create_async("/producer/node2",b"child2")
+zk.create_async("/zookeeper",b'zookeeper')
+zk.create_async("/zookeeper/node1",b"child1")
+zk.create_async("/zookeeper/node2",b"child2")
 event.wait(timeout=10)
 if not zk.connected:
    raise Exception
@@ -135,21 +135,21 @@ def zknormal(length,res1):
     strmaster="master,"+str(result[0])
     print("strmaster:",strmaster)
     strmaster1=bytes(strmaster, 'ascii')
-    zk.delete("/producer", recursive=True)
-    zk.ensure_path("/producer")
+    zk.delete("/zookeeper", recursive=True)
+    zk.ensure_path("/zookeeper")
     print("length is",length)
     for i in range(0,length):
         varn="slave"+str(countZookeeper)
         strres="slave,"+str(res1[i])
         strres1=bytes(strres, 'ascii')
         print("strres:",strres)
-        zk.create("/producer/node_"+varn, strres1,ephemeral=True)
-        data, stat = zk.get("/producer/node_"+varn)
+        zk.create("/zookeeper/node_"+varn, strres1,ephemeral=True)
+        data, stat = zk.get("/zookeeper/node_"+varn)
         print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
         countZookeeper+=1
 
-    zk.create("/producer/node_master", strmaster1,ephemeral=True)
-    data, stat = zk.get("/producer/node_master")
+    zk.create("/zookeeper/node_master", strmaster1,ephemeral=True)
+    data, stat = zk.get("/zookeeper/node_master")
     print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
 
     
@@ -241,9 +241,14 @@ def crash_master():
         if "slave" in container.name:
             slavecount+=1
         print("container_id2:",container.name)
-    children = zk.get_children("/producer")
+    children = zk.get_children("/zookeeper")
     print("Children are:",children)
-
+    zk.delete("/zookeeper/master", recursive=True)
+    children = zk.get_children("/zookeeper")
+    print("Children are:",children)
+    for i in children.list() :
+        print(i)
+    
     if slavecount==1:
         createContainer()
     return {},200
