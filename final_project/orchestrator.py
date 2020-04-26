@@ -126,7 +126,8 @@ zk.create_async("/zookeeper/node2",b"child2")
 event.wait(timeout=10)
 if not zk.connected:
    raise Exception
-# List the children"""
+# List the children
+"""
 
 def zknormal(length,res1):
     global countZookeeper
@@ -135,37 +136,55 @@ def zknormal(length,res1):
     strmaster="master,"+str(result[0])
     print("strmaster:",strmaster)
     strmaster1=bytes(strmaster, 'ascii')
-    zk.delete("/zookeeper", recursive=True)
-    zk.ensure_path("/zookeeper")
+    if zk.exists("/zookeeper"):
+        print("Node already exists")
+    else:
+        print("in else")
+        zk.ensure_path("/zookeeper")
     print("length is",length)
     for i in range(0,length):
         varn="slave"+str(countZookeeper)
         strres="slave,"+str(res1[i])
         strres1=bytes(strres, 'ascii')
         print("strres:",strres)
-        zk.create("/zookeeper/node_"+varn, strres1,ephemeral=True)
+        if zk.exists("/zookeeper/node_"+varn):
+            print("Node already exists")
+        else:
+            print("in else")
+            zk.create("/zookeeper/node_"+varn, strres1,ephemeral=True)
         data, stat = zk.get("/zookeeper/node_"+varn)
         print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
         countZookeeper+=1
 
-    zk.create("/zookeeper/node_master", strmaster1,ephemeral=True)
+    if zk.exists("/zookeeper/node_master"):
+        print("Node already exists")
+    else:
+        print("in else")
+        zk.create("/zookeeper/node_master", strmaster1,ephemeral=True)
     data, stat = zk.get("/zookeeper/node_master")
     print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
 
     
 
-def createContainer():
+def createContainer(container):
 	global count
 	varname="slave"+str(count)
 	container = client.containers.run("final_project_slave","python worker.py",links={"rabbitmq":"rabbitmq"},network="final_project_default",detach=True)
-	flag=0
-	for container in client.containers.list():
-                if '_' in container.name and flag==0:
-                        container.stop()
-                        #container.remove()
-                        flag=1
-                elif '_' in container.name and flag==1:
-                        container.rename(varname)
+        countc = 0
+        for _ in client.containers.list():
+            countc+=1
+        if container+2=countc:
+
+	    flag=0
+	    for container in client.containers.list():
+                    if '_' in container.name and flag==0:
+                            print("inside if contaner")
+                            container.stop()
+                            #container.remove()
+                            flag=1
+                    elif '_' in container.name and flag==1:
+                         print("inside else container")
+                            container.rename(varname)
                         count+=1
 
 
@@ -195,9 +214,11 @@ def timer():
                 createContainer()
                 print("now executed")
         r=requests.get("http://localhost:8000/api/v1/worker/list")
+        print("RJSON:",r.json())
+        print("CONTAINERS:",length,",",containers)
         zknormal(containers,r.json())
         res=requests.delete('http://localhost:8000/api/v1/_count')
-        time.sleep(120)
+        time.sleep(60)
 
 @app.route('/api/v1/_count',methods=["GET"])
 def http_count1():
@@ -340,7 +361,7 @@ def writetodb():
 # 9
 @app.route('/api/v1/db/read', methods=["POST"])
 def readfromdb():
-    #http_count()
+    http_count()
     queue_name = 'READ_queue'
     user_details = dict(request.json)
     print(user_details)

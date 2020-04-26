@@ -17,9 +17,22 @@ import threading
 import pika
 import sys
 import os
+import docker
+from kazoo.client import KazooClient
 
 from sqlalchemy.ext.declarative import declarative_base
+
 Base = declarative_base()
+client1 = docker.APIClient(base_url='unix://var/run/docker.sock')
+client = docker.DockerClient(base_url='unix://var/run/docker.sock')
+
+def list_master():
+    pid_list = []
+    for container in client.containers.list():
+        if "master" in container.name:
+            temp=client1.inspect_container(container.id)['State']['Pid']
+            pid_list.append(temp)
+    return sorted(pid_list)
 
 class User(Base):
     __tablename__ = 'User'
@@ -154,12 +167,22 @@ def reader():
 
 
 if __name__ == '__main__':
+    result = list_master()
     t1 = threading.Thread(target=writer, args=())
     t2 = threading.Thread(target=reader, args=())
     t3=threading.Thread(target=syncHere,args=())
     if os.environ["container_type"] == "master" :
+        strmaster="master,"+str(result[0])
+        print("strmaster:",strmaster)
+        strmaster1=bytes(strmaster, 'ascii')
+        zk = KazooClient(hosts='zookeeper:2181')
+        zk.start()
+        zk.delete("/zookeeper/node_master", recursive=True)
+        zk.create("/zookeeper/node_master", strmaster1,ephemeral=True)
+        data, stat = zk.get("/zookeeper/node_master")
+        print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
         t1.start()
     else :
         t2.start()
         t3.start()
-    app.run(debug=True,host='0.0.0.0',port=8080)
+    app.run(debug=True,host='0.0.0.0',port=8000)

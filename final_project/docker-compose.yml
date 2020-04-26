@@ -13,6 +13,7 @@ services:
 
   
   zookeeper:
+    container_name: "zookeeper"
     image: zookeeper
     restart: on-failure
     hostname: zookeeper
@@ -34,6 +35,8 @@ services:
       - container_type=master
     volumes:
     - .:/code
+    - /var/run/docker.sock:/var/run/docker.sock
+    - /usr/bin/docker:/usr/bin/docker
     links:
     - rabbitmq
     - zookeeper
@@ -54,6 +57,8 @@ services:
       - container_type=slave
     volumes:
     - .:/code
+    - /var/run/docker.sock:/var/run/docker.sock
+    - /usr/bin/docker:/usr/bin/docker
     links:
     - rabbitmq
     - zookeeper
