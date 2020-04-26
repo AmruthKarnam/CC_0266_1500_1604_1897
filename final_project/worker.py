@@ -17,9 +17,23 @@ import threading
 import pika
 import sys
 import os
-
+import docker
+#from orchestrator import countZookeeper
+#from orchestrator import zk
 from sqlalchemy.ext.declarative import declarative_base
+from kazoo.client import KazooClient
+
 Base = declarative_base()
+client1 = docker.APIClient(base_url='unix://var/run/docker.sock')
+client = docker.DockerClient(base_url='unix://var/run/docker.sock')
+
+def list_master():
+    pid_list = []
+    for container in client.containers.list():
+        if "master" in container.name:
+            temp=client1.inspect_container(container.id)['State']['Pid']
+            pid_list.append(temp)
+    return sorted(pid_list)
 
 class User(Base):
     __tablename__ = 'User'
@@ -154,10 +168,23 @@ def reader():
 
 
 if __name__ == '__main__':
+    result = list_master()
     t1 = threading.Thread(target=writer, args=())
     t2 = threading.Thread(target=reader, args=())
     t3=threading.Thread(target=syncHere,args=())
+    """x = os.listdir("./")
+    print("files:",x)"""
     if os.environ["container_type"] == "master" :
+        #print("countZoo",countZookeeper)
+        strmaster="master,"+str(result[0])
+        print("strmaster:",strmaster)
+        strmaster1=bytes(strmaster, 'ascii')
+        zk = KazooClient(hosts='zookeeper:2181')
+        zk.start()
+        zk.delete("/zookeeper/node_master", recursive=True)
+        zk.create("/zookeeper/node_master", strmaster1,ephemeral=True)
+        data, stat = zk.get("/zookeeper/node_master")
+        print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
         t1.start()
     else :
         t2.start()
