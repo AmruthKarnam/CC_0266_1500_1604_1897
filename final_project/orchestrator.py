@@ -130,15 +130,49 @@ if not zk.connected:
 """
 
 zk.ensure_path("/zookeeper")
+#zk.delete("/zookeeper/config")
+'''if zk.exists("/zookeeper/config"):
+    
+if zk.exists("/zookeeper/quota"):
+    zk.delete("/zookeeper/quota", recursive=True)'''
         
 @zk.ChildrenWatch('/zookeeper')
 def leader_election(event):
     print("inside watch",event)
-    if zk.exists("/zookeeper"):
-        children_list = zk.get_children("/zookeeper")
-        print("Children:",children_list)
-    else:
-        zk.ensure_path("/zookeeper")
+    flag=0
+    pidlist=[]
+    datalist=[]
+    children_list = zk.get_children("/zookeeper")
+    children_list.remove('quota')
+    children_list.remove('config')
+    print("Children:",children_list)
+    for i in children_list:
+        j="/zookeeper/"+i
+        print("path",j)
+        data,stat=zk.get(j)
+        datalist.append(data.decode("utf-8"))
+    print("data",datalist)
+    for i in datalist:
+        if "master" in i:
+            flag=1
+            break
+    if flag==0:
+        for i in datalist:
+            x=i.split(",")
+            pidlist.append(x[1])
+        print("PID LE",pidlist)
+        pidlist.sort()
+        for i in range(0,len(children_list)):
+            if str(pidlist[0]) in datalist[i]:
+                print("Master here")
+                j="/zookeeper/"+children_list[i]
+                print("set path",j)
+                strmaster="master,"+str(pidlist[0])
+                print("New strmaster",strmaster)
+                strres1=bytes(strmaster, 'ascii')
+                zk.set(j,strres1)
+                break    
+    
 
 
 def zknormal(length,res1):

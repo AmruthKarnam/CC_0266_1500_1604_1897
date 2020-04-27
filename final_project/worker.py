@@ -34,13 +34,8 @@ def list_master():
             pid_list.append(temp)
     return sorted(pid_list)
 
-zk = KazooClient(hosts='zookeeper:2181')
-zk.start()
-result = list_master()
-strmaster="slave,"+str(result[0])
-print("strslave:",strmaster)
-strmaster1=bytes(strmaster, 'ascii')
-zk.create("/zookeeper/node_slave", strmaster1,ephemeral=True,sequence=True)
+
+
 
 
 class User(Base):
@@ -73,7 +68,12 @@ Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
 session=Session()
 
-
+connection = pika.BlockingConnection(
+    pika.ConnectionParameters(host='rabbitmq'))
+channel = connection.channel()
+channel1 = connection.channel()
+channel2 = connection.channel()
+channel3 = connection.channel()
 
 def callbackForSync(ch, method, properties, body):
         print("the body is =",body)
@@ -89,22 +89,20 @@ def callbackForSync(ch, method, properties, body):
         con.execute(body)
 
 def syncHere():
-    connection = pika.BlockingConnection(
-    pika.ConnectionParameters(host='rabbitmq'))
-    channel = connection.channel()
-    channel.exchange_declare(exchange='logs', exchange_type='fanout')
-    result = channel.queue_declare(queue='sync_queue')
+
+    
+    channel1.exchange_declare(exchange='logs', exchange_type='fanout')
+    result = channel1.queue_declare(queue='sync_queue')
     queue_name = result.method.queue
-    channel.queue_bind(exchange='logs', queue="sync_queue")
+    channel1.queue_bind(exchange='logs', queue="sync_queue")
     print(' [*] Waiting for logs. To exit press CTRL+C')
-    channel.basic_consume(
+    channel1.basic_consume(
         queue=queue_name, on_message_callback=callbackForSync, auto_ack=True)
-    channel.start_consuming()
+    channel1.start_consuming()
 
 def writeToSyncQueue(str1):
-    connection = pika.BlockingConnection(
-    pika.ConnectionParameters(host='rabbitmq'))
-    channel = connection.channel()
+
+    
     channel.exchange_declare(exchange='logs', exchange_type='fanout')
     channel.basic_publish(exchange='logs', routing_key="sync_queue", body=str1)
     print(" [x] Sent %r" %str1)
@@ -153,29 +151,46 @@ def on_request(ch, method, properties, body):
 
 
 def writer():
-    connection = pika.BlockingConnection(
-    pika.ConnectionParameters(host='rabbitmq'))
-    channel = connection.channel()
-    channel.queue_declare(queue='WRITE_queue', durable=True)
-    channel.basic_qos(prefetch_count=30)
-    channel.basic_consume(queue='WRITE_queue', on_message_callback=callback,auto_ack=True)
-    channel.start_consuming()
+    
+    
+    channel3.queue_declare(queue='WRITE_queue', durable=True)
+    channel3.basic_qos(prefetch_count=30)
+    channel3.basic_consume(queue='WRITE_queue', on_message_callback=callback,auto_ack=True)
+    channel3.start_consuming()
 
 
 def reader():
-    connection = pika.BlockingConnection(
-    pika.ConnectionParameters(host='rabbitmq'))
-    channel = connection.channel()
-    channel.queue_declare(queue='rpc_queue')
-    channel.basic_qos(prefetch_count=30)
-    channel.basic_consume(queue='rpc_queue', on_message_callback=on_request,auto_ack=True)
-    print(" [x] Awaiting RPC requests")
-    channel.start_consuming()
 
+    
+    channel2.queue_declare(queue='rpc_queue')
+    channel2.basic_qos(prefetch_count=30)
+    channel2.basic_consume(queue='rpc_queue', on_message_callback=on_request,auto_ack=True)
+    print(" [x] Awaiting RPC requests")
+    channel2.start_consuming()
+
+
+zk = KazooClient(hosts='zookeeper:2181')
+zk.start()
+result = list_master()
+strmaster="slave,"+str(result[0])
+print("strslave:",strmaster)
+strmaster1=bytes(strmaster, 'ascii')
+zk.create("/zookeeper/node_worker", strmaster1,ephemeral=True,sequence=True)
+
+@zk.DataWatch('/zookeeper/node_worker')
+def stopper(data, stat, event):
+    channel1.close()
+    channel2.close()
 
 
 
 if __name__ == '__main__':
+    if not channel1.close():
+        syncHere()
+    if not channel2.close():
+        reader()
+    writer()
+    
     """result = list_master()
     t1 = threading.Thread(target=writer, args=())
     t2 = threading.Thread(target=reader, args=())
