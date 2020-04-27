@@ -25,14 +25,19 @@ from sqlalchemy.ext.declarative import declarative_base
 Base = declarative_base()
 client1 = docker.APIClient(base_url='unix://var/run/docker.sock')
 client = docker.DockerClient(base_url='unix://var/run/docker.sock')
-
-def list_master():
+flagsync=0
+flagread=0
+flagwrite=0
+def list_pid():
     pid_list = []
+    countp=0
     for container in client.containers.list():
-        if "master" in container.name:
-            temp=client1.inspect_container(container.id)['State']['Pid']
-            pid_list.append(temp)
-    return sorted(pid_list)
+        countp+=1
+        temp=client1.inspect_container(container.id)['State']['Pid']
+        pid_list.append(temp)
+    pid_list.sort()
+    print("countp",pid_list[countp-1])
+    return pid_list[countp-1]
 
 
 
@@ -171,8 +176,8 @@ def reader():
 
 zk = KazooClient(hosts='zookeeper:2181')
 zk.start()
-result = list_master()
-strmaster="slave,"+str(result[0])
+result = list_pid()
+strmaster="slave,"+str(result)
 print("strslave:",strmaster)
 strmaster1=bytes(strmaster, 'ascii')
 zk.create("/zookeeper/node_worker", strmaster1,ephemeral=True,sequence=True)
@@ -180,15 +185,17 @@ zk.create("/zookeeper/node_worker", strmaster1,ephemeral=True,sequence=True)
 @zk.DataWatch('/zookeeper/node_worker')
 def stopper(data, stat, event):
     channel1.close()
+    flagsync=1
     channel2.close()
-
+    flagread=1
 
 
 if __name__ == '__main__':
-    if not channel1.close():
+    if flagsync==0:
         syncHere()
-    if not channel2.close():
+    if flagread==0:
         reader()
+
     writer()
     
     """result = list_master()
