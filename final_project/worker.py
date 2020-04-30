@@ -25,8 +25,8 @@ from sqlalchemy.ext.declarative import declarative_base
 Base = declarative_base()
 client1 = docker.APIClient(base_url='unix://var/run/docker.sock')
 client = docker.DockerClient(base_url='unix://var/run/docker.sock')
-flagsync=0
-flagread=0
+flagsync=1
+flagread=1
 flagwrite=0
 def list_pid():
     pid_list = []
@@ -103,7 +103,13 @@ def syncHere():
     print(' [*] Waiting for logs. To exit press CTRL+C')
     channel1.basic_consume(
         queue=queue_name, on_message_callback=callbackForSync, auto_ack=True)
-    channel1.start_consuming()
+    #channel1.start_consuming()
+    print("am i seen")
+    channel2.queue_declare(queue='rpc_queue')
+    channel2.basic_qos(prefetch_count=30)
+    channel2.basic_consume(queue='rpc_queue', on_message_callback=on_request,auto_ack=True)
+    print(" [x] Awaiting RPC requests")
+    #channel2.start_consuming()
 
 def writeToSyncQueue(str1):
 
@@ -127,6 +133,7 @@ def callback(ch, method, properties, body):
     print(" [x] Done")
        
 def readfromdb(str1):
+    print("i was here")
     str1=str1[2:-1]
     str1 = str1.replace('\\', '')
     user_details=json.loads(str1)
@@ -183,20 +190,30 @@ strmaster1=bytes(strmaster, 'ascii')
 zk.create("/zookeeper/node_worker", strmaster1,ephemeral=True,sequence=True)
 
 @zk.DataWatch('/zookeeper/node_worker')
-def stopper(data, stat, event):
-    channel1.close()
-    flagsync=1
-    channel2.close()
-    flagread=1
+def stopper(data, stat, event=None):
+	print("inside datawatch")
+	#channel1.close()
+	if data:
+		if "master" in data :
+			flagsync = 0
+			flagwrite = 1
+			#channel2.close()
+			flagread = 0
+		else :
+			flagsync = 1
+			flagwrite = 0
+			#channel2.close()
+			flagread = 1
 
 
 if __name__ == '__main__':
-    if flagsync==0:
+    print("in name=main")
+    if flagsync==1:
         syncHere()
-    if flagread==0:
+    if flagread==1:
         reader()
-
-    writer()
+    if flagwrite == 1 :
+        writer()
     
     """result = list_master()
     t1 = threading.Thread(target=writer, args=())

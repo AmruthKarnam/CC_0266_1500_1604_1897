@@ -143,8 +143,11 @@ def leader_election(event):
     pidlist=[]
     datalist=[]
     children_list = zk.get_children("/zookeeper")
-    children_list.remove('quota')
-    children_list.remove('config')
+    if 'quota' in children_list :
+    	children_list.remove('quota')
+    if 'config' in children_list :
+    	children_list.remove('config')
+    #children_list.remove('config')
     print("Children:",children_list)
     for i in children_list:
         j="/zookeeper/"+i
@@ -250,6 +253,7 @@ def timer():
             containers = 1
         res1 = requests.get("http://localhost:8000/api/v1/worker/list")
         length = len(res1.json())
+        print("length is ",length)
         if length>containers:
             for i in range(length-containers):
                 requests.post("http://localhost:8000/api/v1/crash/slave")
@@ -265,6 +269,8 @@ def timer():
         print("CONTAINERS:",length,",",containers)
         #zknormal(containers,r.json())
         res=requests.delete('http://localhost:8000/api/v1/_count')
+        for container in client.containers.list():
+            print("container_id1:",container.name)
         time.sleep(60)
 
 @app.route('/api/v1/_count',methods=["GET"])
@@ -309,13 +315,6 @@ def crash_master():
         if "slave" in container.name:
             slavecount+=1
         print("container_id2:",container.name)
-    children = zk.get_children("/zookeeper")
-    print("Children are:",children)
-    zk.delete("/zookeeper/master", recursive=True)
-    children = zk.get_children("/zookeeper")
-    print("Children are:",children)
-    for i in children.list() :
-        print(i)
     
     if slavecount==1:
         createContainer(0)
@@ -431,6 +430,13 @@ if __name__ == '__main__':
     print("check1")
     t1 = threading.Thread(target=timer, args=())
     print("check2")
+    #container = client.containers.run("final_project_slave","python worker.py",links={"rabbitmq":"rabbitmq"},network="final_project_default")
+    '''for i in client.containers.list() :
+    	if i.name == "slave" :
+    		i.stop()
+    		client.containers.prune()'''
+    
+    #container = client.containers.run("final_project_slave","python worker.py",links={"rabbitmq":"rabbitmq"},network="final_project_default")
     t1.start()
     print("check3")
     
