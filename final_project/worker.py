@@ -80,6 +80,14 @@ channel1 = connection.channel()
 channel2 = connection.channel()
 channel3 = connection.channel()
 
+def syncFirst() :
+    f = open("/code/queries.txt","r")
+    print("iam here")
+    f1  = f.readlines()
+    for query in f1 :
+        con.execute(query)
+    print("out of syncfirst")
+
 def callbackForSync(ch, method, properties, body):
         print("the body is =",body)
         print("the first chara is =",body[0])
@@ -93,7 +101,7 @@ def callbackForSync(ch, method, properties, body):
         print("THe slave is recieving =",body)
         con.execute(body)
 
-def syncHere():
+def reader():
 
     
     channel1.exchange_declare(exchange='logs', exchange_type='fanout')
@@ -122,7 +130,9 @@ def writeToSyncQueue(str1):
 
 def writetodb(str1):
     str1 = str1[2:-1]
+    f = open("/code/queries.txt","a+")
     con.execute(str1)
+    f.write(str1 + '\n')
     writeToSyncQueue(str1)
 
 
@@ -151,6 +161,7 @@ def readfromdb(str1):
 
 def on_request(ch, method, properties, body):
     n = str(body)
+    print("inside on_request")
     response = readfromdb(n)
     ch.basic_publish(exchange='',
                      routing_key=properties.reply_to,
@@ -171,7 +182,7 @@ def writer():
     channel3.start_consuming()
 
 
-def reader():
+'''def reader():
 
     
     channel2.queue_declare(queue='rpc_queue')
@@ -179,8 +190,9 @@ def reader():
     channel2.basic_consume(queue='rpc_queue', on_message_callback=on_request,auto_ack=True)
     print(" [x] Awaiting RPC requests")
     channel2.start_consuming()
+'''
 
-
+'''
 zk = KazooClient(hosts='zookeeper:2181')
 zk.start()
 result = list_pid()
@@ -204,35 +216,37 @@ def stopper(data, stat, event=None):
 			flagwrite = 0
 			#channel2.close()
 			flagread = 1
-
+'''
 
 if __name__ == '__main__':
     print("in name=main")
-    if flagsync==1:
+    '''if flagsync==1:
         syncHere()
     if flagread==1:
         reader()
     if flagwrite == 1 :
         writer()
     
-    """result = list_master()
-    t1 = threading.Thread(target=writer, args=())
-    t2 = threading.Thread(target=reader, args=())
-    t3=threading.Thread(target=syncHere,args=())
+    result = list_master()'''
+    #t1 = threading.Thread(target=writer, args=())
+    #t2 = threading.Thread(target=reader, args=())
+    #t3=threading.Thread(target=syncHere,args=())
     if os.environ["container_type"] == "master" :
-        strmaster="master,"+str(result[0])
-        print("strmaster:",strmaster)
-        strmaster1=bytes(strmaster, 'ascii')
-        zk.delete("/zookeeper/node_master", recursive=True)
-        zk.create("/zookeeper/node_master", strmaster1,ephemeral=True)
-        data, stat = zk.get("/zookeeper/node_master")
-        print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
-        t1.start()
+        #strmaster="master,"+str(result[0])
+        #print("strmaster:",strmaster)
+        #strmaster1=bytes(strmaster, 'ascii')
+        #zk.delete("/zookeeper/node_master", recursive=True)
+        #zk.create("/zookeeper/node_master", strmaster1,ephemeral=True)
+        #data, stat = zk.get("/zookeeper/node_master")
+        #print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
+        writer()
     else :
-        strmaster="slave,"+str(result[0])
-        print("strslave:",strmaster)
-        strmaster1=bytes(strmaster, 'ascii')
-        zk.create("/zookeeper/node_slave", strmaster1,ephemeral=True,sequence=True)
-        t2.start()
-        t3.start()"""
+        #strmaster="slave,"+str(result[0])
+        #print("strslave:",strmaster)
+        #strmaster1=bytes(strmaster, 'ascii')
+        #zk.create("/zookeeper/node_slave", strmaster1,ephemeral=True,sequence=True)
+        #t2.start()
+        #t3.start()
+        syncFirst()
+        reader()
     app.run(debug=True,host='0.0.0.0',port=8000)

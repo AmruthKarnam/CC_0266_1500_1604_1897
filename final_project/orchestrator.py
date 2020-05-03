@@ -33,15 +33,17 @@ client1 = docker.APIClient(base_url='unix://var/run/docker.sock')
 client = docker.DockerClient(base_url='unix://var/run/docker.sock')
 count=0
 countZookeeper=0
+file_object = open('queries.txt', 'a')
+port_num = 8003
 #print("container_id:",container)
 for container in client.containers.list():
    print("container_id1:",container.name)
 print("before client")
-zk = KazooClient(hosts='zookeeper:2181')
+'''zk = KazooClient(hosts='zookeeper:2181')
 zk.start()
 
 print("after function")
-'''zk = KazooClient(hosts='zookeeper:2181')
+zk = KazooClient(hosts='zookeeper:2181')
 print("after client")
 # returns immediately
 event = zk.start_async()
@@ -127,16 +129,17 @@ event.wait(timeout=10)
 if not zk.connected:
    raise Exception
 # List the children
-"""
 
-zk.ensure_path("/zookeeper")
+
+zk.ensure_path("/zookeeper")"""
 #zk.delete("/zookeeper/config")
 '''if zk.exists("/zookeeper/config"):
     
 if zk.exists("/zookeeper/quota"):
     zk.delete("/zookeeper/quota", recursive=True)'''
         
-@zk.ChildrenWatch('/zookeeper')
+#zk.ChildrenWatch('/zookeeper')
+'''
 def leader_election(event):
     print("inside watch",event)
     flag=0
@@ -157,6 +160,7 @@ def leader_election(event):
     print("data",datalist)
     for i in datalist:
         if "master" in i:
+            print("Master found")
             flag=1
             break
     if flag==0:
@@ -174,47 +178,15 @@ def leader_election(event):
                 print("New strmaster",strmaster)
                 strres1=bytes(strmaster, 'ascii')
                 zk.set(j,strres1)
-                break    
-    
-
-
-def zknormal(length,res1):
-    global countZookeeper
-    if zk.exists("/zookeeper"):
-        print("Node already exists")
-    else:
-        print("in else")
-        zk.ensure_path("/zookeeper")
-    """print("length is",length)
-    for i in range(0,length):
-        varn="slave"+str(countZookeeper)
-        strres="slave,"+str(res1[i])
-        strres1=bytes(strres, 'ascii')
-        print("strres:",strres)
-        if zk.exists("/zookeeper/node_"+varn):
-            print("Node already exists")
-        else:
-            print("in else")
-            zk.create("/zookeeper/node_"+varn, strres1,ephemeral=True)
-        data, stat = zk.get("/zookeeper/node_"+varn)
-        print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))"""
-    countZookeeper+=1
-
-    """if zk.exists("/zookeeper/node_master"):
-        print("Node already exists")
-    else:
-        print("in else")
-        zk.create("/zookeeper/node_master", strmaster1,ephemeral=True)
-    data, stat = zk.get("/zookeeper/node_master")
-    print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))"""
-
-    
-
+                break   
+'''
 def createContainer(containers):
     global count
+    global port_num
     varname="slave"+str(count)
-    container = client.containers.run("final_project_slave","python worker.py",links={"rabbitmq":"rabbitmq"},network="final_project_default",detach=True)
+    container = client.containers.run("final_project_slave","python worker.py",ports = {'8000/tcp': port_num},links={"rabbitmq":"rabbitmq"},network="final_project_default",detach=True)
     countc = 0
+    port_num += 1
     for _ in client.containers.list():
         countc+=1
     if containers+2==countc:
@@ -323,21 +295,26 @@ def crash_master():
 
 @app.route('/api/v1/crash/slave',methods=["POST"])
 def crash_slave():
-    print("something Start\n")
-    res1 = requests.get("http://localhost:8000/api/v1/worker/list")
-    l = res1.json()
-    print("list is = ",l)
-    if(len(l)>1):
-        delete_id = l[-1]
-        print("the delete id = ",delete_id)
-        for container in client.containers.list():
-            if client1.inspect_container(container.id)["State"]["Pid"]==delete_id:
-                print("something inside\n")
-                container.stop()
-                #container.remove()
-        #for container in client.containers.list():
-            #print("container_id2:",container.name)
-    return {},200
+	print("something Start\n")
+	res1 = requests.get("http://localhost:8000/api/v1/worker/list")
+	l = res1.json()
+	print("list is = ",l)
+	if(len(l)>0):
+		delete_id = l[-1]
+		print("the delete id = ",delete_id)
+		for container in client.containers.list():
+			if client1.inspect_container(container.id)["State"]["Pid"]==delete_id:
+				print("something inside\n")
+				container.stop()
+				#container.remove()
+		#for container in client.containers.list():
+			#print("container_id2:",container.name)
+				break
+		if(len(l)==1):
+			print(client.containers.list())
+			createContainer(0)
+			print("done")
+	return {},200
 
 
 class OrchestratorRpcClient(object):
@@ -400,6 +377,8 @@ def writetodb():
     else:
         write_message = 'DELETE FROM ' + user_details['table'] + ' WHERE  ' + user_details['column'] + '=' '"' + user_details['value'] + '"'
         write_to_queue(queue_name,write_message)
+    file_object.write(write_message)
+    file_object.write("\n")
     return "written"
 
 

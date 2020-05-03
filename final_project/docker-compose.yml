@@ -34,7 +34,7 @@ services:
     environment:
       - container_type=master
     volumes:
-    - .:/code
+    - ./queries.txt:/code/queries.txt
     - /var/run/docker.sock:/var/run/docker.sock
     - /usr/bin/docker:/usr/bin/docker
     links:
@@ -56,7 +56,7 @@ services:
     environment:
       - container_type=slave
     volumes:
-    - .:/code
+    - ./queries.txt:/code/queries.txt
     - /var/run/docker.sock:/var/run/docker.sock
     - /usr/bin/docker:/usr/bin/docker
     links:
@@ -76,7 +76,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-        - .:/code
+        - ./queries.txt:/code/queries.txt
         - /var/run/docker.sock:/var/run/docker.sock
         - /usr/bin/docker:/usr/bin/docker
     links:
