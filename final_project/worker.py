@@ -117,7 +117,7 @@ def reader():
     channel2.basic_qos(prefetch_count=30)
     channel2.basic_consume(queue='rpc_queue', on_message_callback=on_request,auto_ack=True)
     print(" [x] Awaiting RPC requests")
-    #channel2.start_consuming()
+    channel2.start_consuming()
 
 def writeToSyncQueue(str1):
 
@@ -145,6 +145,7 @@ def callback(ch, method, properties, body):
 def readfromdb(str1):
     print("i was here")
     str1=str1[2:-1]
+    print("reading from",os.environ["container_name"])
     str1 = str1.replace('\\', '')
     user_details=json.loads(str1)
     rs = con.execute('SELECT '+ user_details['columns'] + ' FROM ' + user_details['table'] + ' WHERE ' + user_details['where'])
@@ -192,14 +193,16 @@ def writer():
     channel2.start_consuming()
 '''
 
-'''
+
 zk = KazooClient(hosts='zookeeper:2181')
 zk.start()
-result = list_pid()
+#result = list_pid()
+result = "fdsg"
 strmaster="slave,"+str(result)
 print("strslave:",strmaster)
 strmaster1=bytes(strmaster, 'ascii')
 zk.create("/zookeeper/node_worker", strmaster1,ephemeral=True,sequence=True)
+'''
 
 @zk.DataWatch('/zookeeper/node_worker')
 def stopper(data, stat, event=None):

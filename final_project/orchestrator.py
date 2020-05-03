@@ -27,7 +27,7 @@ from kazoo.client import KazooClient
 import sys
 counter = Value('i', 0)
 connection = pika.BlockingConnection(
-pika.ConnectionParameters(host='rabbitmq'))
+pika.ConnectionParameters(host='rabbitmq',heartbeat=0))
 channel = connection.channel()
 client1 = docker.APIClient(base_url='unix://var/run/docker.sock')
 client = docker.DockerClient(base_url='unix://var/run/docker.sock')
@@ -39,9 +39,10 @@ port_num = 8003
 for container in client.containers.list():
    print("container_id1:",container.name)
 print("before client")
-'''zk = KazooClient(hosts='zookeeper:2181')
+zk = KazooClient(hosts='zookeeper:2181')
 zk.start()
-
+flagrem = 0
+'''
 print("after function")
 zk = KazooClient(hosts='zookeeper:2181')
 print("after client")
@@ -130,61 +131,34 @@ if not zk.connected:
    raise Exception
 # List the children
 
-
-zk.ensure_path("/zookeeper")"""
+"""
+zk.ensure_path("/zookeeper")
 #zk.delete("/zookeeper/config")
 '''if zk.exists("/zookeeper/config"):
     
 if zk.exists("/zookeeper/quota"):
     zk.delete("/zookeeper/quota", recursive=True)'''
         
-#zk.ChildrenWatch('/zookeeper')
-'''
-def leader_election(event):
+@zk.ChildrenWatch('/zookeeper')
+def cont_watch(event):
     print("inside watch",event)
-    flag=0
-    pidlist=[]
-    datalist=[]
+    global flagrem
+
     children_list = zk.get_children("/zookeeper")
     if 'quota' in children_list :
-    	children_list.remove('quota')
+        children_list.remove('quota')
     if 'config' in children_list :
-    	children_list.remove('config')
-    #children_list.remove('config')
-    print("Children:",children_list)
-    for i in children_list:
-        j="/zookeeper/"+i
-        print("path",j)
-        data,stat=zk.get(j)
-        datalist.append(data.decode("utf-8"))
-    print("data",datalist)
-    for i in datalist:
-        if "master" in i:
-            print("Master found")
-            flag=1
-            break
-    if flag==0:
-        for i in datalist:
-            x=i.split(",")
-            pidlist.append(x[1])
-        print("PID LE",pidlist)
-        pidlist.sort()
-        for i in range(0,len(children_list)):
-            if str(pidlist[0]) in datalist[i]:
-                print("Master here")
-                j="/zookeeper/"+children_list[i]
-                print("set path",j)
-                strmaster="master,"+str(pidlist[0])
-                print("New strmaster",strmaster)
-                strres1=bytes(strmaster, 'ascii')
-                zk.set(j,strres1)
-                break   
-'''
+        children_list.remove('config')
+    print(children_list)
+    print(flagrem)
+    if(flagrem==1):
+        createContainer(len(children_list))   
+
 def createContainer(containers):
     global count
     global port_num
     varname="slave"+str(count)
-    container = client.containers.run("final_project_slave","python worker.py",ports = {'8000/tcp': port_num},links={"rabbitmq":"rabbitmq"},network="final_project_default",detach=True)
+    container = client.containers.run("final_project_slave","python worker.py",network="final_project_default",environment = ["container_type=slave","container_name="+varname],detach=True)
     countc = 0
     port_num += 1
     for _ in client.containers.list():
@@ -243,7 +217,7 @@ def timer():
         res=requests.delete('http://localhost:8000/api/v1/_count')
         for container in client.containers.list():
             print("container_id1:",container.name)
-        time.sleep(60)
+        time.sleep(120)
 
 @app.route('/api/v1/_count',methods=["GET"])
 def http_count1():
@@ -295,11 +269,13 @@ def crash_master():
 
 @app.route('/api/v1/crash/slave',methods=["POST"])
 def crash_slave():
+	global flagrem	
 	print("something Start\n")
 	res1 = requests.get("http://localhost:8000/api/v1/worker/list")
 	l = res1.json()
 	print("list is = ",l)
 	if(len(l)>0):
+		flagrem = 1
 		delete_id = l[-1]
 		print("the delete id = ",delete_id)
 		for container in client.containers.list():
@@ -310,10 +286,7 @@ def crash_slave():
 		#for container in client.containers.list():
 			#print("container_id2:",container.name)
 				break
-		if(len(l)==1):
-			print(client.containers.list())
-			createContainer(0)
-			print("done")
+			
 	return {},200
 
 
@@ -321,7 +294,7 @@ class OrchestratorRpcClient(object):
 
     def __init__(self):
         self.connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host='rabbitmq'))
+            pika.ConnectionParameters(host='rabbitmq',heartbeat=0))
 
         self.channel = self.connection.channel()
 

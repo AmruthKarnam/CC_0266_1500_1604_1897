@@ -33,6 +33,7 @@ services:
       - "8001:8000"
     environment:
       - container_type=master
+      - container_name=master
     volumes:
     - ./queries.txt:/code/queries.txt
     - /var/run/docker.sock:/var/run/docker.sock
@@ -55,6 +56,7 @@ services:
       - "8002:8000"
     environment:
       - container_type=slave
+      - container_name=slave
     volumes:
     - ./queries.txt:/code/queries.txt
     - /var/run/docker.sock:/var/run/docker.sock
