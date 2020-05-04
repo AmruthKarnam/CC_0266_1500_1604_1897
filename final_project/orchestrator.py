@@ -32,113 +32,13 @@ channel = connection.channel()
 client1 = docker.APIClient(base_url='unix://var/run/docker.sock')
 client = docker.DockerClient(base_url='unix://var/run/docker.sock')
 count=0
+flagrem=0
 countZookeeper=0
 file_object = open('queries.txt', 'a')
 port_num = 8003
-#print("container_id:",container)
-for container in client.containers.list():
-   print("container_id1:",container.name)
-print("before client")
 zk = KazooClient(hosts='zookeeper:2181')
 zk.start()
-flagrem = 0
-'''
-print("after function")
-zk = KazooClient(hosts='zookeeper:2181')
-print("after client")
-# returns immediately
-event = zk.start_async()
-print("after start")
-# Wait for 30 seconds and see if we're connected
-event.wait(timeout=20)
-print("after wait")
-if not zk.connected:
-    # Not connected, stop trying to connect
-    zk.stop()
-    raise Exception("Unable to connect.")
-
-print("after function")
-zk.delete("/zookeeper", recursive=True)
 zk.ensure_path("/zookeeper")
-if zk.exists("/zookeeper/node_1"):
-    print("Node already exists")
-else:
-    print("in else")
-    zk.create("/zookeeper/node_1", b"demo zookeeper node")
-data, stat = zk.get("/zookeeper/node_1")
-print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
-zk.create("/zookeeper/node_3", b"demo zookeeper node")
-@zk.ChildrenWatch('/zookeeper')
-def demo_func(event):
-    print("inside demo_func")
-    # Create a node with data
-    if zk.exists("/zookeeper/node_2"):
-        print("Hello World")
-    else:
-        print("something else")
-        zk.ensure_path("/zookeeper/node_2")
-    print("Event=",event)
-    children = zk.get_children("/zookeeper")
-    print(" %s children with names %s" % (len(children), children))
-
-#children = zk.get_children("/zookeeper", watch=demo_func)
-print("There are %s children with names %s" % (len(children), children))
-zk.delete("/zookeeper", recursive=True)
-# Both these statements return immediately, the second sets a callback
-# that will be run when get_children_async has its return value
-#async_obj = zk.get_children_async("/")
-#async_obj.rawlink(my_callback)
-'''
-"""import logging
-
-from kazoo.client import KazooClient
-from kazoo.handlers.gevent import SequentialGeventHandler
-from kazoo.client import KazooState
-print("before client")
-zk = KazooClient(hosts='zookeeper:2181',handler=SequentialGeventHandler())
-print("after client")
-zk.start()
-print("after start")
-def my_listener(state):
-    print("into function")
-    if state == KazooState.LOST:
-        print("STATE:",state)
-    elif state == KazooState.SUSPENDED:
-        print("STATE:",state)
-    else:
-        print("STATE",state)
-
-zk.add_listener(my_listener)
-print("after listner")
-zk.stop()"""
-"""zk = KazooClient(hosts="zookeeper:2181",handler=SequentialGeventHandler())
-# returns immediately
-event = zk.start_async()
-# Can also use the @DataWatch and @ChildrenWatch decorators for the same
-def my_callback(async_obj):
-    try:
-        children = async_obj.get()
-        print("something")
-    except (ConnectionLossException, NoAuthException):
-        sys.exit(1)
-async_obj = zk.get_children_async("zookeeper")
-async_obj.rawlink(my_callback)
-zk.create_async("/zookeeper",b'zookeeper')
-zk.create_async("/zookeeper/node1",b"child1")
-zk.create_async("/zookeeper/node2",b"child2")
-event.wait(timeout=10)
-if not zk.connected:
-   raise Exception
-# List the children
-
-"""
-zk.ensure_path("/zookeeper")
-#zk.delete("/zookeeper/config")
-'''if zk.exists("/zookeeper/config"):
-    
-if zk.exists("/zookeeper/quota"):
-    zk.delete("/zookeeper/quota", recursive=True)'''
-        
 @zk.ChildrenWatch('/zookeeper')
 def cont_watch(event):
     print("inside watch",event)
@@ -200,23 +100,24 @@ def timer():
         print("ajeya=",containers)
         if containers == 0:
             containers = 1
-        res1 = list_worker()
-        length = len(res1.json())
-        print("length is ",length)
+        res1 = list_worker1()
+        length = len(res1)
+        #len(res1.json())
+        print("length is ",len(res1))
         if length>containers:
             for i in range(length-containers):
-                crash_slave()
+                crash_slave1()
             client.containers.prune()
-            res1=list_worker()
-            print("after pruning = ",len(res1.json()))
+            res1=list_worker1()
+            print("after pruning = ",len(res1))
         elif length<containers:
             for i in range(containers-length):
                 createContainer(i+length)
                 print("now executed")
-        r=list_worker()
-        print("RJSON:",r.json())
+        r=list_worker1()
+        print("RJSON:",r)
         print("CONTAINERS:",length,",",containers)
-        res=http_count_reset()
+        res=http_count_reset1()
         for container in client.containers.list():
             print("container_id1:",container.name)
         time.sleep(120)
@@ -226,6 +127,10 @@ def http_count1():
     list1 = []
     list1.append(counter.value)
     return json.dumps(list1),200
+
+def http_count_reset1():
+    with counter.get_lock():
+        counter.value = 0
 
 @app.route('/api/v1/_count',methods=["DELETE"])
 def http_count_reset():
@@ -241,6 +146,14 @@ def list_master():
             temp=client1.inspect_container(container.id)['State']['Pid']
             pid_list.append(temp)
     return json.dumps(sorted(pid_list)),200
+
+def list_worker1():
+    pid_list = []
+    for container in client.containers.list():
+        if "slave" in container.name:
+            temp=client1.inspect_container(container.id)['State']['Pid']
+            pid_list.append(temp)
+    return sorted(pid_list)
 
 @app.route('/api/v1/worker/list',methods=["GET"])
 def list_worker():
@@ -268,6 +181,26 @@ def crash_master():
         createContainer(0)
     return {},200
 
+
+def crash_slave():
+	global flagrem	
+	print("something Start\n")
+	res1 = requests.get("http://localhost:8000/api/v1/worker/list")
+	l = res1.json()
+	print("list is = ",l)
+	if(len(l)>0):
+		flagrem = 1
+		delete_id = l[-1]
+		print("the delete id = ",delete_id)
+		for container in client.containers.list():
+			if client1.inspect_container(container.id)["State"]["Pid"]==delete_id:
+				print("something inside\n")
+				container.stop()
+				#container.remove()
+		#for container in client.containers.list():
+			#print("container_id2:",container.name)
+				break
+			
 
 @app.route('/api/v1/crash/slave',methods=["POST"])
 def crash_slave():
