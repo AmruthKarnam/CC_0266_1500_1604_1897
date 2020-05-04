@@ -244,6 +244,7 @@ if __name__ == '__main__':
         #print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
         writer()
     else :
+
         #strmaster="slave,"+str(result[0])
         #print("strslave:",strmaster)
         #strmaster1=bytes(strmaster, 'ascii')

@@ -152,8 +152,10 @@ def cont_watch(event):
     print(children_list)
     print(flagrem)
     if(flagrem==1):
-        createContainer(len(children_list))   
-
+        print(len(children_list))
+        createContainer(len(children_list))
+        flagrem=0   
+    print(flagrem,len(children_list))
 def createContainer(containers):
     global count
     global port_num
