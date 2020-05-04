@@ -156,6 +156,7 @@ def cont_watch(event):
         createContainer(len(children_list))
         flagrem=0   
     print(flagrem,len(children_list))
+
 def createContainer(containers):
     global count
     global port_num
@@ -199,24 +200,23 @@ def timer():
         print("ajeya=",containers)
         if containers == 0:
             containers = 1
-        res1 = requests.get("http://localhost:8000/api/v1/worker/list")
+        res1 = list_worker()
         length = len(res1.json())
         print("length is ",length)
         if length>containers:
             for i in range(length-containers):
-                requests.post("http://localhost:8000/api/v1/crash/slave")
+                crash_slave()
             client.containers.prune()
-            res1=requests.get("http://localhost:8000/api/v1/worker/list")
+            res1=list_worker()
             print("after pruning = ",len(res1.json()))
         elif length<containers:
             for i in range(containers-length):
                 createContainer(i+length)
                 print("now executed")
-        r=requests.get("http://localhost:8000/api/v1/worker/list")
+        r=list_worker()
         print("RJSON:",r.json())
         print("CONTAINERS:",length,",",containers)
-        #zknormal(containers,r.json())
-        res=requests.delete('http://localhost:8000/api/v1/_count')
+        res=http_count_reset()
         for container in client.containers.list():
             print("container_id1:",container.name)
         time.sleep(120)
@@ -373,10 +373,12 @@ def readfromdb():
     
 @app.route('/api/v1/db/clear',methods=["POST"])
 def cleardb():
+
     queue_name = 'WRITE_queue'
     write_to_queue(queue_name,'DELETE FROM Riders')
     write_to_queue(queue_name,'DELETE FROM Ride')
     write_to_queue(queue_name,'DELETE FROM User')
+    with open('queries.txt','w'): pass
     return {},200
     
 if __name__ == '__main__':
