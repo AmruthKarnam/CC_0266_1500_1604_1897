@@ -34,7 +34,6 @@ client = docker.DockerClient(base_url='unix://var/run/docker.sock')
 count=0
 flagrem=0
 countZookeeper=0
-file_object = open('queries.txt', 'a')
 port_num = 8003
 zk = KazooClient(hosts='zookeeper:2181')
 zk.start()
@@ -264,7 +263,7 @@ class OrchestratorRpcClient(object):
 orchestrator_rpc = OrchestratorRpcClient()
 
 def write_to_queue(queue_name,message) :
-    channel.queue_declare(queue=queue_name, durable=True)
+    channel.queue_declare(queue=queue_name)
     channel.basic_publish(
         exchange='',
         routing_key=queue_name,
@@ -281,12 +280,11 @@ def writetodb():
     if user_details['isPut']==1:
         write_message = 'INSERT INTO ' + user_details['table'] + ' VALUES(' + user_details['insert'] + ')'
         write_to_queue(queue_name,write_message)
-        
+        print("write here")
     else:
         write_message = 'DELETE FROM ' + user_details['table'] + ' WHERE  ' + user_details['column'] + '=' '"' + user_details['value'] + '"'
         write_to_queue(queue_name,write_message)
-    file_object.write(write_message)
-    file_object.write("\n")
+        print("write here")
     return "written"
 
 

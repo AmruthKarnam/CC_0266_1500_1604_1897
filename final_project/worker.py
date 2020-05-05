@@ -1,6 +1,7 @@
 import pika
 from flask import Flask, render_template, jsonify, request, abort, g,request
 import requests
+import logging
 #import sqlite3
 #import status
 from werkzeug.exceptions import BadRequest
@@ -19,7 +20,8 @@ import sys
 import os
 import docker
 from kazoo.client import KazooClient
-
+pika_logger = logging.getLogger('pika')
+pika_logger.level = logging.DEBUG
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
@@ -79,7 +81,8 @@ channel = connection.channel()
 channel1 = connection.channel()
 channel2 = connection.channel()
 channel3 = connection.channel()
-
+channel3.queue_declare(queue='WRITE_queue')
+channel3.basic_qos(prefetch_count=30)
 def syncFirst() :
     f = open("/code/queries.txt","r")
     print("iam here")
@@ -140,6 +143,7 @@ def callback(ch, method, properties, body):
     print(" [x] Received %r" % body)
     abc=str(body)
     writetodb(abc)
+    ch.basic_ack(delivery_tag = 1)
     print(" [x] Done")
        
 def readfromdb(str1):
@@ -177,9 +181,8 @@ def on_request(ch, method, properties, body):
 def writer():
     
     
-    channel3.queue_declare(queue='WRITE_queue', durable=True)
-    channel3.basic_qos(prefetch_count=30)
-    channel3.basic_consume(queue='WRITE_queue', on_message_callback=callback,auto_ack=True)
+
+    channel3.basic_consume(queue='WRITE_queue', on_message_callback=callback)
     channel3.start_consuming()
 
 
@@ -231,7 +234,7 @@ if __name__ == '__main__':
         writer()
     
     result = list_master()'''
-    #t1 = threading.Thread(target=writer, args=())
+    
     #t2 = threading.Thread(target=reader, args=())
     #t3=threading.Thread(target=syncHere,args=())
     if os.environ["container_type"] == "master" :
@@ -242,7 +245,8 @@ if __name__ == '__main__':
         #zk.create("/zookeeper/node_master", strmaster1,ephemeral=True)
         #data, stat = zk.get("/zookeeper/node_master")
         #print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
-        writer()
+        t1 = threading.Thread(target=writer, args=())
+        t1.start()
     else :
 
         #strmaster="slave,"+str(result[0])
@@ -253,4 +257,4 @@ if __name__ == '__main__':
         #t3.start()
         syncFirst()
         reader()
-    app.run(debug=True,host='0.0.0.0',port=8000)
+    app.run(host='0.0.0.0',port=8000)
