@@ -103,8 +103,14 @@ def callbackForSync(ch, method, properties, body):
         print("THe slave is recieving =",body)
         con.execute(body)
 
-def reader():    
-    global queue_name    
+def reader():   
+    channelSyncReceive = connection.channel()
+    channelSyncReceive.exchange_declare(exchange='logs', exchange_type='fanout')
+    result = channelSyncReceive.queue_declare(queue='sync_queue')
+    queue_name = result.method.queue
+    channelSyncReceive.queue_bind(exchange='logs', queue="sync_queue")
+    channelSyncReceive.basic_consume(
+        queue=queue_name, on_message_callback=callbackForSync, auto_ack=True)
     print(' [*] Waiting for logs. To exit press CTRL+C')    
     print("am i seen")    
     print(" [x] Awaiting RPC requests")
@@ -133,7 +139,6 @@ def callback(ch, method, properties, body):
     print(" [x] Received %r" % body)
     abc=str(body)
     writetodb(abc)
-    ch.basic_ack(delivery_tag=method.delivery_tag)
     print(" [x] Done")
        
 def readfromdb(str1):
@@ -165,7 +170,7 @@ def on_request(ch, method, properties, body):
                      body=response)
 
 def writer():
-    channelWriter.basic_consume(queue='WRITE_queue', on_message_callback=callback)
+    channelWriter.basic_consume(queue='WRITE_queue', on_message_callback=callback,auto_ack=True)
     channelWriter.start_consuming()
 
 connection = pika.BlockingConnection(
@@ -173,19 +178,12 @@ connection = pika.BlockingConnection(
 channelSyncSend = connection.channel()
 channelSyncSend.exchange_declare(exchange='logs', exchange_type='fanout')
 
-channelSyncReceive = connection.channel()
-channelSyncReceive.exchange_declare(exchange='logs', exchange_type='fanout')
-result = channelSyncReceive.queue_declare(queue='sync_queue')
-queue_name = result.method.queue
-channelSyncReceive.queue_bind(exchange='logs', queue="sync_queue")
-channelSyncReceive.basic_consume(
-        queue=queue_name, on_message_callback=callbackForSync, auto_ack=True)
 channelRPC = connection.channel()
 channelRPC.queue_declare(queue='rpc_queue')
 channelRPC.basic_qos(prefetch_count=30)
 channelRPC.basic_consume(queue='rpc_queue', on_message_callback=on_request,auto_ack=True)
 channelWriter = connection.channel()
-channelWriter.queue_declare(queue='WRITE_queue')
+channelWriter.queue_declare(queue='WRITE_queue',durable=True)
 channelWriter.basic_qos(prefetch_count=30)
 
 '''
