@@ -181,7 +181,7 @@ def crash_master():
     return {},200
 
 
-def crash_slave():
+def crash_slave1():
 	global flagrem	
 	print("something Start\n")
 	res1 = requests.get("http://localhost:8000/api/v1/worker/list")
