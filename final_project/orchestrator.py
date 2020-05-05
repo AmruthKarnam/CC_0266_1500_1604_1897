@@ -67,7 +67,7 @@ def createContainer(containers):
     port_num += 1
     for _ in client.containers.list():
         countc+=1
-    print(containers,countc,"comparisn")
+    print(containers,countc,count,"comparisn")
     if containers+2==countc:
         flag=0
         for container in client.containers.list():
@@ -87,6 +87,8 @@ def createContainer(containers):
                 print("inside for container")
                 container.rename(varname)
                 count+=1
+    print("Count now",count)
+    
     client.containers.prune()
 
 def http_count():
@@ -99,7 +101,8 @@ def timer():
         print("hello im here\n")
         no_of_req = counter.value
         containers =  math.ceil(no_of_req/20)
-        print("ajeya=",containers)
+        print("containers=",containers)
+        print("requests=",no_of_req)
         if containers == 0:
             containers = 1
         res1 = list_worker1()
