@@ -1,3 +1,0 @@
-INSERT INTO User VALUES('user1','dfggcc')
-INSERT INTO User VALUES('user2','dfggcc')
-INSERT INTO User VALUES('user3','dfggcc')

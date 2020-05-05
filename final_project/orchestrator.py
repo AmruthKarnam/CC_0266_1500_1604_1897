@@ -61,11 +61,13 @@ def createContainer(containers):
     global count
     global port_num
     varname="slave"+str(count)
+    print(count,"count of container")
     container = client.containers.run("final_project_slave","python worker.py",network="final_project_default",environment = ["container_type=slave","container_name="+varname],detach=True, restart_policy={"Name": "on-failure"})
     countc = 0
     port_num += 1
     for _ in client.containers.list():
         countc+=1
+    print(containers,countc,"comparisn")
     if containers+2==countc:
         flag=0
         for container in client.containers.list():
@@ -74,6 +76,7 @@ def createContainer(containers):
                             container.stop()
                             #container.remove()
                             flag=1
+                            
                     elif '_' in container.name and flag==1:
                         print("inside else container")
                         container.rename(varname)
@@ -84,8 +87,7 @@ def createContainer(containers):
                 print("inside for container")
                 container.rename(varname)
                 count+=1
-
-
+    client.containers.prune()
 
 def http_count():
     with counter.get_lock():
