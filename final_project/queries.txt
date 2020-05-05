@@ -1,2 +1,0 @@
-INSERT INTO User VALUES('user89115','dfggcc')
-INSERT INTO User VALUES('user89115','dfggcc')
