@@ -22,6 +22,7 @@ import sys
 import uuid
 import threading
 import math
+with open("/code/queries.txt","w") as f: pass
 import docker
 from kazoo.client import KazooClient
 import sys
@@ -60,7 +61,7 @@ def createContainer(containers):
     global count
     global port_num
     varname="slave"+str(count)
-    container = client.containers.run("final_project_slave","python worker.py",network="final_project_default",environment = ["container_type=slave","container_name="+varname],detach=True)
+    container = client.containers.run("final_project_slave","python worker.py",network="final_project_default",environment = ["container_type=slave","container_name="+varname],detach=True, restart_policy={"Name": "on-failure"})
     countc = 0
     port_num += 1
     for _ in client.containers.list():
@@ -309,7 +310,7 @@ def cleardb():
     write_to_queue(queue_name,'DELETE FROM Riders')
     write_to_queue(queue_name,'DELETE FROM Ride')
     write_to_queue(queue_name,'DELETE FROM User')
-    with open('queries.txt','w'): pass
+    with open('/code/queries.txt','w'): pass
     return {},200
     
 if __name__ == '__main__':

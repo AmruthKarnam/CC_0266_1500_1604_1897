@@ -30,6 +30,17 @@ client = docker.DockerClient(base_url='unix://var/run/docker.sock')
 flagsync=1
 flagread=1
 flagwrite=0
+
+zk = KazooClient(hosts='zookeeper:2181')
+zk.start()
+#result = list_pid()
+result = "fdsg"
+strmaster="slave,"+str(result)
+print("strslave:",strmaster)
+strmaster1=bytes(strmaster, 'ascii')
+zk.create("/zookeeper/node_worker", strmaster1,ephemeral=True,sequence=True)
+
+
 def list_pid():
     pid_list = []
     countp=0
@@ -40,10 +51,6 @@ def list_pid():
     pid_list.sort()
     print("countp",pid_list[countp-1])
     return pid_list[countp-1]
-
-
-
-
 
 class User(Base):
     __tablename__ = 'User'
@@ -75,14 +82,6 @@ Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
 session=Session()
 
-connection = pika.BlockingConnection(
-    pika.ConnectionParameters(host='rabbitmq'))
-channel = connection.channel()
-channel1 = connection.channel()
-channel2 = connection.channel()
-channel3 = connection.channel()
-channel3.queue_declare(queue='WRITE_queue')
-channel3.basic_qos(prefetch_count=30)
 def syncFirst() :
     f = open("/code/queries.txt","r")
     print("iam here")
@@ -104,46 +103,37 @@ def callbackForSync(ch, method, properties, body):
         print("THe slave is recieving =",body)
         con.execute(body)
 
-def reader():
-
-    
-    channel1.exchange_declare(exchange='logs', exchange_type='fanout')
-    result = channel1.queue_declare(queue='sync_queue')
-    queue_name = result.method.queue
-    channel1.queue_bind(exchange='logs', queue="sync_queue")
-    print(' [*] Waiting for logs. To exit press CTRL+C')
-    channel1.basic_consume(
-        queue=queue_name, on_message_callback=callbackForSync, auto_ack=True)
-    #channel1.start_consuming()
-    print("am i seen")
-    channel2.queue_declare(queue='rpc_queue')
-    channel2.basic_qos(prefetch_count=30)
-    channel2.basic_consume(queue='rpc_queue', on_message_callback=on_request,auto_ack=True)
+def reader():    
+    global queue_name    
+    print(' [*] Waiting for logs. To exit press CTRL+C')    
+    print("am i seen")    
     print(" [x] Awaiting RPC requests")
-    channel2.start_consuming()
+    channelSyncReceive.start_consuming()
+    channelRPC.start_consuming()
 
-def writeToSyncQueue(str1):
-
-    
-    channel.exchange_declare(exchange='logs', exchange_type='fanout')
-    channel.basic_publish(exchange='logs', routing_key="sync_queue", body=str1)
+def writeToSyncQueue(str1):        
+    channelSyncSend.basic_publish(exchange='logs', routing_key="sync_queue", body=str1)
     print(" [x] Sent %r" %str1)
-    connection.close()
-
 
 def writetodb(str1):
     str1 = str1[2:-1]
     f = open("/code/queries.txt","a+")
-    con.execute(str1)
-    f.write(str1 + '\n')
-    writeToSyncQueue(str1)
+    try:
+        con.execute(str1)
+        
+    except:
+        print("Already exists")
+    else:
+        f.write(str1 + '\n')
+        writeToSyncQueue(str1)
 
+    
 
 def callback(ch, method, properties, body):
     print(" [x] Received %r" % body)
     abc=str(body)
     writetodb(abc)
-    ch.basic_ack(delivery_tag = 1)
+    ch.basic_ack(delivery_tag=method.delivery_tag)
     print(" [x] Done")
        
 def readfromdb(str1):
@@ -174,53 +164,46 @@ def on_request(ch, method, properties, body):
                                                          properties.correlation_id),
                      body=response)
 
-
-
-
-
 def writer():
-    
-    
+    channelWriter.basic_consume(queue='WRITE_queue', on_message_callback=callback)
+    channelWriter.start_consuming()
 
-    channel3.basic_consume(queue='WRITE_queue', on_message_callback=callback)
-    channel3.start_consuming()
+connection = pika.BlockingConnection(
+    pika.ConnectionParameters(host='rabbitmq'))
+channelSyncSend = connection.channel()
+channelSyncSend.exchange_declare(exchange='logs', exchange_type='fanout')
 
+channelSyncReceive = connection.channel()
+channelSyncReceive.exchange_declare(exchange='logs', exchange_type='fanout')
+result = channelSyncReceive.queue_declare(queue='sync_queue')
+queue_name = result.method.queue
+channelSyncReceive.queue_bind(exchange='logs', queue="sync_queue")
+channelSyncReceive.basic_consume(
+        queue=queue_name, on_message_callback=callbackForSync, auto_ack=True)
+channelRPC = connection.channel()
+channelRPC.queue_declare(queue='rpc_queue')
+channelRPC.basic_qos(prefetch_count=30)
+channelRPC.basic_consume(queue='rpc_queue', on_message_callback=on_request,auto_ack=True)
+channelWriter = connection.channel()
+channelWriter.queue_declare(queue='WRITE_queue')
+channelWriter.basic_qos(prefetch_count=30)
 
-'''def reader():
-
-    
-    channel2.queue_declare(queue='rpc_queue')
-    channel2.basic_qos(prefetch_count=30)
-    channel2.basic_consume(queue='rpc_queue', on_message_callback=on_request,auto_ack=True)
-    print(" [x] Awaiting RPC requests")
-    channel2.start_consuming()
-'''
-
-
-zk = KazooClient(hosts='zookeeper:2181')
-zk.start()
-#result = list_pid()
-result = "fdsg"
-strmaster="slave,"+str(result)
-print("strslave:",strmaster)
-strmaster1=bytes(strmaster, 'ascii')
-zk.create("/zookeeper/node_worker", strmaster1,ephemeral=True,sequence=True)
 '''
 
 @zk.DataWatch('/zookeeper/node_worker')
 def stopper(data, stat, event=None):
 	print("inside datawatch")
-	#channel1.close()
+	#channelSyncReceive.close()
 	if data:
 		if "master" in data :
 			flagsync = 0
 			flagwrite = 1
-			#channel2.close()
+			#channelRPC.close()
 			flagread = 0
 		else :
 			flagsync = 1
 			flagwrite = 0
-			#channel2.close()
+			#channelRPC.close()
 			flagread = 1
 '''
 
@@ -245,8 +228,7 @@ if __name__ == '__main__':
         #zk.create("/zookeeper/node_master", strmaster1,ephemeral=True)
         #data, stat = zk.get("/zookeeper/node_master")
         #print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
-        t1 = threading.Thread(target=writer, args=())
-        t1.start()
+        writer()
     else :
 
         #strmaster="slave,"+str(result[0])
