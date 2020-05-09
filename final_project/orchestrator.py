@@ -33,7 +33,7 @@ pika.ConnectionParameters(host='rabbitmq',heartbeat=0))
 channel = connection.channel()
 client1 = docker.APIClient(base_url='unix://var/run/docker.sock')
 client = docker.DockerClient(base_url='unix://var/run/docker.sock')
-count=0
+count=5
 flagrem=0
 countZookeeper=0
 zk = KazooClient(hosts='zookeeper:2181')
@@ -59,8 +59,7 @@ def cont_watch(event):
 
 def createContainer(containers):
     with counter1.get_lock():
-        
-        count = len(client.containers.list()) + 1
+        global count
         varname="slave"+str(count)
         print("new slave name created",varname)
         print(count,"count of container")
@@ -92,8 +91,9 @@ def createContainer(containers):
                     container.rename(varname)
                     count+=1
         print("Count now",count)
+        count = count + 2
         
-        client.containers.prune()
+        #client.containers.prune()
 
 def http_count():
     with counter.get_lock():
@@ -116,8 +116,6 @@ def timer():
         if length>containers:
             for i in range(length-containers):
                 crash_slave1()
-                with counter1.get_lock(): 
-                    client.containers.prune()
             res1=list_worker1()
             print("number of slaves after pruning = ",len(res1))
         elif length<containers:
@@ -133,6 +131,15 @@ def timer():
         http_count2()
         for container in client.containers.list():
             print("container_id1:",container.name)
+        tt = 1
+        while tt:
+            try:
+                client.containers.prune()
+                tt = 0
+            except:
+                continue   
+        
+	
         time.sleep(120)
 
 def http_count2():
@@ -206,7 +213,7 @@ def crash_slave1():
 	l = res1.json()
 	print("list is = ",l)
 	if(len(l)>0):
-		flagrem = 1
+		flagrem = 0
 		delete_id = l[-1]
 		print("the delete id = ",delete_id)
 		for container in client.containers.list():
@@ -335,16 +342,7 @@ if __name__ == '__main__':
     print("check1")
     t1 = threading.Thread(target=timer, args=())
     print("check2")
-    #container = client.containers.run("final_project_slave","python worker.py",links={"rabbitmq":"rabbitmq"},network="final_project_default")
-    '''for i in client.containers.list() :
-    	if i.name == "slave" :
-    		i.stop()
-    		client.containers.prune()'''
-    
-    #container = client.containers.run("final_project_slave","python worker.py",links={"rabbitmq":"rabbitmq"},network="final_project_default")
     t1.start()
     print("check3")
-    
-    #container = client.containers.run("final_project_slave","python slave.py",links={"rabbitmq":"rabbitmq"},network="final_project_default")
     app.run(debug=True,host='0.0.0.0',port=8000)
     
