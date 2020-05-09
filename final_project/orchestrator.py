@@ -109,7 +109,7 @@ def timer():
         res1 = list_worker1()
         length = len(res1)
         #len(res1.json())
-        print("length is ",len(res1))
+        print("length of workers are ",len(res1))
         if length>containers:
             for i in range(length-containers):
                 crash_slave1()
@@ -119,7 +119,9 @@ def timer():
             print("number of slaves after pruning = ",len(res1))
         elif length<containers:
             for i in range(containers-length):
+                print("Containers before including orch....",client.containers.list())
                 createContainer(i+length)
+                print("Containers after",client.containers.list())
                 print("create container now executed")
         r=list_worker1()
         print("workers now after everything",r)
