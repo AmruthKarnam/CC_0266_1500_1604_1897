@@ -27,6 +27,7 @@ import docker
 from kazoo.client import KazooClient
 import sys
 counter = Value('i', 0)
+counter1 = Value('i',0)
 connection = pika.BlockingConnection(
 pika.ConnectionParameters(host='rabbitmq',heartbeat=0))
 channel = connection.channel()
@@ -35,13 +36,12 @@ client = docker.DockerClient(base_url='unix://var/run/docker.sock')
 count=0
 flagrem=0
 countZookeeper=0
-port_num = 8003
 zk = KazooClient(hosts='zookeeper:2181')
 zk.start()
 zk.ensure_path("/zookeeper")
 @zk.ChildrenWatch('/zookeeper')
 def cont_watch(event):
-    print("inside watch",event)
+    print("inside watch")
     global flagrem
 
     children_list = zk.get_children("/zookeeper")
@@ -50,46 +50,47 @@ def cont_watch(event):
     if 'config' in children_list :
         children_list.remove('config')
     print(children_list)
-    print(flagrem)
+    print("flagrem",flagrem)
     if(flagrem==1):
         print(len(children_list))
         createContainer(len(children_list))
         flagrem=0   
-    print(flagrem,len(children_list))
+    print("flagrem now",flagrem,len(children_list))
 
 def createContainer(containers):
-    global count
-    global port_num
-    varname="slave"+str(count)
-    print(count,"count of container")
-    container = client.containers.run("final_project_slave","python worker.py",network="final_project_default",environment = ["container_type=slave","container_name="+varname],detach=True, restart_policy={"Name": "on-failure"})
-    countc = 0
-    port_num += 1
-    for _ in client.containers.list():
-        countc+=1
-    print(containers,countc,count,"comparisn")
-    if containers+2==countc:
-        flag=0
-        for container in client.containers.list():
-                    if '_' in container.name and flag==0:
-                            print("inside if contaner")
-                            container.stop()
-                            #container.remove()
-                            flag=1
-                            
-                    elif '_' in container.name and flag==1:
-                        print("inside else container")
-                        container.rename(varname)
-                        count+=1
-    else:
-        for container in client.containers.list():
-            if '_' in container.name:
-                print("inside for container")
-                container.rename(varname)
-                count+=1
-    print("Count now",count)
-    
-    client.containers.prune()
+    with counter1.get_lock():
+        
+        count = len(client.containers.list()) + 1
+        varname="slave"+str(count)
+        print("new slave name created",varname)
+        print(count,"count of container")
+        container = client.containers.run("final_project_slave","python worker.py",network="final_project_default",environment = ["container_type=slave","container_name="+varname],detach=True, restart_policy={"Name": "on-failure"})
+        countc = 0
+        for _ in client.containers.list():
+            countc+=1
+        print(containers,countc,count,"comparisn")
+        if containers+2==countc:
+            flag=0
+            for container in client.containers.list():
+                        if '_' in container.name and flag==0:
+                                print("inside if contaner")
+                                container.stop()
+                                #container.remove()
+                                flag=1
+                                
+                        elif '_' in container.name and flag==1:
+                            print("inside else container")
+                            container.rename(varname)
+                            count+=1
+        else:
+            for container in client.containers.list():
+                if '_' in container.name:
+                    print("inside for container")
+                    container.rename(varname)
+                    count+=1
+        print("Count now",count)
+        
+        client.containers.prune()
 
 def http_count():
     with counter.get_lock():
@@ -101,8 +102,8 @@ def timer():
         print("hello im here\n")
         no_of_req = counter.value
         containers =  math.ceil(no_of_req/20)
-        print("containers=",containers)
-        print("requests=",no_of_req)
+        print("number of containers needed =",containers)
+        print("number of read requests = ",no_of_req)
         if containers == 0:
             containers = 1
         res1 = list_worker1()
@@ -112,15 +113,16 @@ def timer():
         if length>containers:
             for i in range(length-containers):
                 crash_slave1()
-            client.containers.prune()
+                with counter1.get_lock(): 
+                    client.containers.prune()
             res1=list_worker1()
-            print("after pruning = ",len(res1))
+            print("number of slaves after pruning = ",len(res1))
         elif length<containers:
             for i in range(containers-length):
                 createContainer(i+length)
-                print("now executed")
+                print("create container now executed")
         r=list_worker1()
-        print("RJSON:",r)
+        print("workers now after everything",r)
         print("CONTAINERS:",length,",",containers)
         res=http_count_reset1()
         for container in client.containers.list():

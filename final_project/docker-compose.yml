@@ -45,7 +45,6 @@ services:
     - rabbitmq
     - zookeeper
     restart: on-failure
-    entrypoint: "./wait-for-it.sh rabbitmq:5672"
   
   slave:
     container_name: "slave"
@@ -69,7 +68,6 @@ services:
     - rabbitmq
     - zookeeper
     restart: on-failure
-    entrypoint: "./wait-for-it.sh rabbitmq:5672"
 
   orchestrator:
     container_name: "orchestrator"
@@ -78,7 +76,7 @@ services:
         dockerfile: Dockerfile
     command: sh -c "sleep 15 && python orchestrator.py"
     ports:
-      - "8000:8000"
+      - "80:8000"
     volumes:
         - ./queries.txt:/code/queries.txt
         - /var/run/docker.sock:/var/run/docker.sock
@@ -86,7 +84,6 @@ services:
     links:
     - rabbitmq
     - zookeeper
-    entrypoint: "./wait-for-it.sh rabbitmq:5672"
     depends_on:
     - rabbitmq
     - zookeeper
