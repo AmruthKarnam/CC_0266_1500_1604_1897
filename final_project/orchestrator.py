@@ -53,7 +53,7 @@ def cont_watch(event):
     print("flagrem",flagrem)
     if(flagrem==1):
         print(len(children_list))
-        createContainer(len(children_list))
+        createContainer(len(children_list)-1)
         flagrem=0   
     print("flagrem now",flagrem,len(children_list))
 
@@ -68,6 +68,9 @@ def createContainer(containers):
         countc = 0
         for _ in client.containers.list():
             countc+=1
+        print("Countc just before sub",countc)
+        if(countc>4):
+            countc-=4
         print(containers,countc,count,"comparisn")
         if containers+2==countc:
             flag=0
