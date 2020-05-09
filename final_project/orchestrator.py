@@ -129,10 +129,15 @@ def timer():
         r=list_worker1()
         print("workers now after everything",r)
         print("CONTAINERS:",length,",",containers)
-        res=http_count_reset1()
+        http_count_reset1()
+        http_count2()
         for container in client.containers.list():
             print("container_id1:",container.name)
         time.sleep(120)
+
+def http_count2():
+    print(counter.value,"No of req after reset")
+    
 
 @app.route('/api/v1/_count',methods=["GET"])
 def http_count1():
