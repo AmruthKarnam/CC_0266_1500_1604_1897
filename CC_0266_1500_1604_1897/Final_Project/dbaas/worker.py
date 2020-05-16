@@ -1,17 +1,17 @@
-import pika
+#Required imports
+
 from flask import Flask, render_template, jsonify, request, abort, g,request
-import requests
-import logging
-#import sqlite3
-#import status
 from werkzeug.exceptions import BadRequest
-#from models import sessions
-app = Flask(__name__)
 from sqlalchemy import create_engine, Sequence
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import String, Integer, Float, Boolean, Column, ForeignKey, DateTime
 from sqlalchemy.orm import sessionmaker
-import random
 from datetime import datetime
+from kazoo.client import KazooClient
+import pika
+import requests
+import logging
+import random
 import csv
 import json
 import threading
@@ -19,28 +19,29 @@ import pika
 import sys
 import os
 import docker
-from kazoo.client import KazooClient
-pika_logger = logging.getLogger('pika')
-pika_logger.level = logging.DEBUG
-from sqlalchemy.ext.declarative import declarative_base
 
+
+app = Flask(__name__)
+
+#Used for crating Object Relational Mappings of tables in the database
 Base = declarative_base()
+
+#Used to connect to the Docker SDK
 client1 = docker.APIClient(base_url='unix://var/run/docker.sock')
 client = docker.DockerClient(base_url='unix://var/run/docker.sock')
-flagsync=1
-flagread=1
-flagwrite=0
 
+#Connect to the zookepeer Container
 zk = KazooClient(hosts='zookeeper:2181')
 zk.start()
-#result = list_pid()
+
+#Worker znode created
 result = "fdsg"
 strmaster="slave,"+str(result)
 print("strslave:",strmaster)
 strmaster1=bytes(strmaster, 'ascii')
 zk.create("/zookeeper/node_worker", strmaster1,ephemeral=True,sequence=True)
 
-
+#Lists all the container process ids of the workers
 def list_pid():
     pid_list = []
     countp=0
@@ -52,6 +53,7 @@ def list_pid():
     print("countp",pid_list[countp-1])
     return pid_list[countp-1]
 
+#User schema
 class User(Base):
     __tablename__ = 'User'
     username = Column(String(8080), primary_key=True)
@@ -60,9 +62,7 @@ class User(Base):
     def init(self, username, password):
         self.username = username
         self.password = password
-
-
-
+#Ride schema
 class Ride(Base):
     __tablename__ = 'Ride'
     rideid = Column(Integer, primary_key=True)
@@ -71,38 +71,33 @@ class Ride(Base):
     dest = Column(String(80), nullable=False)
     timestamp = Column(DateTime,nullable=False)
 
+#Riders schema
 class Riders(Base):
     __tablename__ = 'Riders'
     rideid = Column(Integer, ForeignKey('Ride.rideid',ondelete = 'CASCADE'),primary_key=True)
     username = Column(String(8000), primary_key = True)
 
+#Create sqlite database file and connect to the database
 engine = create_engine('sqlite:///ride_share.db', connect_args={'check_same_thread': False}, echo=True,pool_pre_ping=True)
 con = engine.connect()
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
 session=Session()
 
+#Function to sync the newly created slave with all the writes that are stored in text file
 def syncFirst() :
     f = open("/code/queries.txt","r")
-    print("iam here")
     f1  = f.readlines()
     for query in f1 :
         con.execute(query)
-    print("out of syncfirst")
 
+#Callback function of the channel sync receive that executes the write requests sent from master
 def callbackForSync(ch, method, properties, body):
-        print("the body is =",body)
-        print("the first chara is =",body[0])
-        print("the last chara is =",body[-1])
-        print("type = ",type(body))
         body=str(body)
-        print("after string",body)
         body=body[2:-1]
-        print("after string",body)
-        #body=body[1:]
-        print("THe slave is recieving =",body)
         con.execute(body)
 
+#Function that consumes for read and sync messages from RPC and SyncReceive channels respectively
 def reader():   
     channelSyncReceive = connection.channel()
     channelSyncReceive.exchange_declare(exchange='logs', exchange_type='fanout')
@@ -111,16 +106,14 @@ def reader():
     channelSyncReceive.queue_bind(exchange='logs', queue="sync_queue")
     channelSyncReceive.basic_consume(
         queue=queue_name, on_message_callback=callbackForSync, auto_ack=True)
-    print(' [*] Waiting for logs. To exit press CTRL+C')    
-    print("am i seen")    
-    print(" [x] Awaiting RPC requests")
     channelSyncReceive.start_consuming()
     channelRPC.start_consuming()
 
+#called by master to publish sync requests to all the slaves
 def writeToSyncQueue(str1):        
     channelSyncSend.basic_publish(exchange='logs', routing_key="sync_queue", body=str1)
-    print(" [x] Sent %r" %str1)
-
+    
+#executes the write request in the database
 def writetodb(str1):
     str1 = str1[2:-1]
     f = open("/code/queries.txt","a+")
@@ -133,16 +126,14 @@ def writetodb(str1):
         f.write(str1 + '\n')
         writeToSyncQueue(str1)
 
-    
-
+#callback function of channel writer
 def callback(ch, method, properties, body):
-    print(" [x] Received %r" % body)
     abc=str(body)
     writetodb(abc)
-    print(" [x] Done")
-       
+
+#executes the read request in the database
+#returns the data read as a JSON Response       
 def readfromdb(str1):
-    print("i was here")
     str1=str1[2:-1]
     print("reading from",os.environ["container_name"])
     str1 = str1.replace('\\', '')
@@ -158,10 +149,9 @@ def readfromdb(str1):
             list1.append(d)
     return json.dumps(list1)
 
-
+#Publishes the data read from database to the RPC Queue
 def on_request(ch, method, properties, body):
     n = str(body)
-    print("inside on_request")
     response = readfromdb(n)
     ch.basic_publish(exchange='',
                      routing_key=properties.reply_to,
@@ -169,72 +159,35 @@ def on_request(ch, method, properties, body):
                                                          properties.correlation_id),
                      body=response)
 
+#Consume for write requests sent from Orchestrator
 def writer():
     channelWriter.basic_consume(queue='WRITE_queue', on_message_callback=callback,auto_ack=True)
     channelWriter.start_consuming()
 
+#Declaring the connection and channels
 connection = pika.BlockingConnection(
     pika.ConnectionParameters(host='rabbitmq'))
+    
+#Channel sync send is the channel that is used by the master to send the write query to all the slaves
 channelSyncSend = connection.channel()
 channelSyncSend.exchange_declare(exchange='logs', exchange_type='fanout')
 
+#Channel RPC is the channel for sending data read from the database in slave container to the orchestrator container waiting for response
 channelRPC = connection.channel()
 channelRPC.queue_declare(queue='rpc_queue')
 channelRPC.basic_qos(prefetch_count=30)
 channelRPC.basic_consume(queue='rpc_queue', on_message_callback=on_request,auto_ack=True)
+
+#Channel Writer is used by master to consume write requests sent from the Orchestrator
 channelWriter = connection.channel()
 channelWriter.queue_declare(queue='WRITE_queue',durable=True)
 channelWriter.basic_qos(prefetch_count=30)
 
-'''
-
-@zk.DataWatch('/zookeeper/node_worker')
-def stopper(data, stat, event=None):
-	print("inside datawatch")
-	#channelSyncReceive.close()
-	if data:
-		if "master" in data :
-			flagsync = 0
-			flagwrite = 1
-			#channelRPC.close()
-			flagread = 0
-		else :
-			flagsync = 1
-			flagwrite = 0
-			#channelRPC.close()
-			flagread = 1
-'''
-
+#Based on the environment variable called "container_type" the worker runs as master or slave
 if __name__ == '__main__':
-    print("in name=main")
-    '''if flagsync==1:
-        syncHere()
-    if flagread==1:
-        reader()
-    if flagwrite == 1 :
-        writer()
-    
-    result = list_master()'''
-    
-    #t2 = threading.Thread(target=reader, args=())
-    #t3=threading.Thread(target=syncHere,args=())
     if os.environ["container_type"] == "master" :
-        #strmaster="master,"+str(result[0])
-        #print("strmaster:",strmaster)
-        #strmaster1=bytes(strmaster, 'ascii')
-        #zk.delete("/zookeeper/node_master", recursive=True)
-        #zk.create("/zookeeper/node_master", strmaster1,ephemeral=True)
-        #data, stat = zk.get("/zookeeper/node_master")
-        #print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
         writer()
     else :
-
-        #strmaster="slave,"+str(result[0])
-        #print("strslave:",strmaster)
-        #strmaster1=bytes(strmaster, 'ascii')
-        #zk.create("/zookeeper/node_slave", strmaster1,ephemeral=True,sequence=True)
-        #t2.start()
-        #t3.start()
         syncFirst()
         reader()
     app.run(host='0.0.0.0',port=8000)

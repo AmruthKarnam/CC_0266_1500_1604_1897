@@ -1,19 +1,17 @@
 from flask import Flask, render_template, jsonify, request, abort, g,request
 import requests
-#import status
 from werkzeug.exceptions import BadRequest
-#from models import sessions
-app = Flask(__name__)
 from sqlalchemy import create_engine, Sequence
 from sqlalchemy import String, Integer, Float, Boolean, Column, ForeignKey, DateTime
 from sqlalchemy.orm import sessionmaker
 from kazoo.exceptions import ConnectionLossException
 from kazoo.exceptions import NoAuthException
-import random
 from kazoo.exceptions import ConnectionLossException
 from kazoo.exceptions import NoAuthException
+from kazoo.client import KazooClient
 from datetime import datetime
 from multiprocessing import Value
+import random
 import time
 import csv
 import json
@@ -22,10 +20,13 @@ import sys
 import uuid
 import threading
 import math
-with open("/code/queries.txt","w") as f: pass
 import docker
-from kazoo.client import KazooClient
 import sys
+
+with open("/code/queries.txt","w") as f: pass
+
+app = Flask(__name__)
+
 counter = Value('i', 0)
 counter1 = Value('i',0)
 connection = pika.BlockingConnection(
@@ -39,11 +40,12 @@ countZookeeper=0
 zk = KazooClient(hosts='zookeeper:2181')
 zk.start()
 zk.ensure_path("/zookeeper")
+#This is a children watch function , which keeps a watch on all the children and when any of the changes this function is called.
+#But this function creates slaves if and only if flagrem is set.
 @zk.ChildrenWatch('/zookeeper')
 def cont_watch(event):
     print("inside watch")
     global flagrem
-
     children_list = zk.get_children("/zookeeper")
     if 'quota' in children_list :
         children_list.remove('quota')
@@ -57,13 +59,15 @@ def cont_watch(event):
         flagrem=0   
     print("flagrem now",flagrem,len(children_list))
 
+
+#Creating containers using Docker-SDK and then renaming the created the slave accordingly
 def createContainer(containers):
     with counter1.get_lock():
         global count
         varname="slave"+str(count)
         print("new slave name created",varname)
         print(count,"count of container")
-        container = client.containers.run("final_project_slave","python worker.py",network="final_project_default",environment = ["container_type=slave","container_name="+varname],detach=True, restart_policy={"Name": "on-failure"})
+        container = client.containers.run("final_project_slave","python worker.py",network="dbaas_default",environment = ["container_type=slave","container_name="+varname],detach=True, restart_policy={"Name": "on-failure"})
         countc = 0
         for _ in client.containers.list():
             countc+=1
@@ -77,9 +81,7 @@ def createContainer(containers):
                         if '_' in container.name and flag==0:
                                 print("inside if contaner")
                                 container.stop()
-                                #container.remove()
                                 flag=1
-                                
                         elif '_' in container.name and flag==1:
                             print("inside else container")
                             container.rename(varname)
@@ -92,17 +94,19 @@ def createContainer(containers):
                     count+=1
         print("Count now",count)
         count = count + 2
-        
-        #client.containers.prune()
 
+#returns the total number of HTTP requests. 
+# (This is done to decrease the number of api calls within the same container or file)   
 def http_count():
     with counter.get_lock():
         counter.value += 1
 
+
+#This is a thread which takes care of auto scaling based on the number of read requests.
+#Depending on the number of requests , it  will  increase or decrease the number of slaves.
 def timer():
     global counter
     while(True):
-        print("hello im here\n")
         no_of_req = counter.value
         containers =  math.ceil(no_of_req/20)
         print("number of containers needed =",containers)
@@ -111,7 +115,7 @@ def timer():
             containers = 1
         res1 = list_worker1()
         length = len(res1)
-        #len(res1.json())
+        
         print("length of workers are ",len(res1))
         if length>containers:
             for i in range(length-containers):
@@ -138,30 +142,37 @@ def timer():
                 tt = 0
             except:
                 continue   
-        
-	
+
         time.sleep(120)
 
+
+#dummy function used for debugging.
 def http_count2():
     print(counter.value,"No of req after reset")
     
-
+#Returns a JSONified list of a single number having the number of requests sent to the rides instance, and the HTTP response status code.
 @app.route('/api/v1/_count',methods=["GET"])
 def http_count1():
     list1 = []
     list1.append(counter.value)
     return json.dumps(list1),200
 
+#API for resetting the counts sent to the rides instance. 
+#Returns an empty JSON array, and the HTTP response status code.
+#(This is done to decrease the number of api calls within the same container or file)
 def http_count_reset1():
     with counter.get_lock():
         counter.value = 0
 
+#API for resetting the counts sent to the rides instance. 
+#Returns an empty JSON array, and the HTTP response status code.
 @app.route('/api/v1/_count',methods=["DELETE"])
 def http_count_reset():
     with counter.get_lock():
         counter.value = 0
     return {},200
 
+#Api which lists all the masters, but this wasnt required since we always have only one master.
 @app.route('/api/v1/master/list',methods=["GET"])
 def list_master():
     pid_list = []
@@ -171,6 +182,7 @@ def list_master():
             pid_list.append(temp)
     return json.dumps(sorted(pid_list)),200
 
+#All the slaves are listed in form of sorted array.(This is done to decrease the number of api calls within the same container or file)
 def list_worker1():
     pid_list = []
     for container in client.containers.list():
@@ -179,6 +191,7 @@ def list_worker1():
             pid_list.append(temp)
     return sorted(pid_list)
 
+#All the slaves are listed in form of sorted array.
 @app.route('/api/v1/worker/list',methods=["GET"])
 def list_worker():
     pid_list = []
@@ -188,13 +201,14 @@ def list_worker():
             pid_list.append(temp)
     return json.dumps(sorted(pid_list)),200
 
+#This will crash the master.
 @app.route('/api/v1/crash/master',methods=["POST"])
 def crash_master():
     slavecount=0
     for container in client.containers.list():
         if "master" in container.name:
             container.stop()
-            #container.remove()
+            
             client.containers.prune()
     for container in client.containers.list():
         if "slave" in container.name:
@@ -205,7 +219,9 @@ def crash_master():
         createContainer(0)
     return {},200
 
-
+#This will crash the slave and will spawn a new slave immediately(This is done to decrease the number of api calls within the same container or file)
+# The spawing of new slave is taking care by zookeeper , since there is a change in the children watch and we have set the flagrem
+# Setting flagrem means , we are allowing the slave to be created(corresponding fuction will be called)	
 def crash_slave1():
 	global flagrem	
 	print("something Start\n")
@@ -219,13 +235,11 @@ def crash_slave1():
 		for container in client.containers.list():
 			if client1.inspect_container(container.id)["State"]["Pid"]==delete_id:
 				print("something inside\n")
-				container.stop()
-				#container.remove()
-		#for container in client.containers.list():
-			#print("container_id2:",container.name)
+				container.stop()			
 				break
-			
-
+#This will crash the slave and will spawn a new slave immediately
+# The spawing of new slave is taking care by zookeeper , since there is a change in the children watch and we have set the flagrem
+# Setting flagrem means , we are allowing the slave to be created(corresponding fuction will be called)			
 @app.route('/api/v1/crash/slave',methods=["POST"])
 def crash_slave():
 	global flagrem	
@@ -241,25 +255,21 @@ def crash_slave():
 			if client1.inspect_container(container.id)["State"]["Pid"]==delete_id:
 				print("something inside\n")
 				container.stop()
-				#container.remove()
-		#for container in client.containers.list():
-			#print("container_id2:",container.name)
 				break
 			
 	return {},200
 
-
+#Class for our SqlAlchemy database
+#The connections for our rabbitMq
+#And reqiured queues are created.
 class OrchestratorRpcClient(object):
 
     def __init__(self):
         self.connection = pika.BlockingConnection(
             pika.ConnectionParameters(host='rabbitmq',heartbeat=0))
-
         self.channel = self.connection.channel()
-
         result = self.channel.queue_declare(queue='')
         self.callback_queue = result.method.queue
-
         self.channel.basic_consume(
             queue=self.callback_queue,
             on_message_callback=self.on_response,
@@ -287,6 +297,7 @@ class OrchestratorRpcClient(object):
 
 orchestrator_rpc = OrchestratorRpcClient()
 
+#Just wrting the write requests to the write queue.
 def write_to_queue(queue_name,message) :
     channel.queue_declare(queue=queue_name,durable=True)
     channel.basic_publish(
@@ -297,7 +308,9 @@ def write_to_queue(queue_name,message) :
             delivery_mode=2,  # make message persistent
         ))
 
-
+#calling the function to write the write requests to the write queue.
+#The sql command is sent in a string format.
+#Once the write has taken place , written is returned.
 @app.route('/api/v1/db/write', methods=["POST"])
 def writetodb():
     queue_name = 'WRITE_queue'
@@ -305,16 +318,13 @@ def writetodb():
     if user_details['isPut']==1:
         write_message = 'INSERT INTO ' + user_details['table'] + ' VALUES(' + user_details['insert'] + ')'
         write_to_queue(queue_name,write_message)
-        print("write here")
     else:
         write_message = 'DELETE FROM ' + user_details['table'] + ' WHERE  ' + user_details['column'] + '=' '"' + user_details['value'] + '"'
         write_to_queue(queue_name,write_message)
-        print("write here")
     return "written"
 
-
-
-# 9
+#Writing the read requests into the rpc queue.
+#The request is sent as a json object where it is parsed and processed.
 @app.route('/api/v1/db/read', methods=["POST"])
 def readfromdb():
     http_count()
@@ -325,24 +335,21 @@ def readfromdb():
     print(str(user_details))
     response = orchestrator_rpc.call(json.dumps(user_details))
     return response
-    
-    
+
+#It clears all the databases, Users , writes and riders  
+#And the queries.txt is also cleared , which is used in syncing a new slave 
 @app.route('/api/v1/db/clear',methods=["POST"])
 def cleardb():
-
     queue_name = 'WRITE_queue'
     write_to_queue(queue_name,'DELETE FROM Riders')
     write_to_queue(queue_name,'DELETE FROM Ride')
     write_to_queue(queue_name,'DELETE FROM User')
     with open('/code/queries.txt','w'): pass
     return {},200
-    
+
+#Here we are calling the correponding timer thread.  
 if __name__ == '__main__':
-    
-    print("check1")
     t1 = threading.Thread(target=timer, args=())
-    print("check2")
     t1.start()
-    print("check3")
     app.run(debug=True,host='0.0.0.0',port=8000)
     

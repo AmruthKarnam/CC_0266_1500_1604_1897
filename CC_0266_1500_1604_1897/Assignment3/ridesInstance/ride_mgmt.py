@@ -1,40 +1,41 @@
+#Required imports
 from flask import Flask, render_template, jsonify, request, abort, g
-#from flask_cors import CORS
-import requests
-#import sqlite3
-#import status
 from werkzeug.exceptions import BadRequest
-#from models import sessions
-app = Flask(__name__)
-#cors = CORS(app)
 from sqlalchemy import create_engine, Sequence
 from sqlalchemy import String, Integer, Float, Boolean, Column, ForeignKey, DateTime
 from sqlalchemy.orm import sessionmaker
-import random
 from datetime import datetime
 from multiprocessing import Value
+import requests
+import random
 import csv
 import json
+
+app = Flask(__name__)
+
 dict1 = dict()
 comma = ','
 quotes = '"'
 counter = Value('i', 0)
 
+#Parses the whole datetime string into year, month, days, hours, minutes and seconds.
+#Returns the tuple of year, month, days, hours, minutes and seconds.
 def parse(datetime) :
-    #print(datetime)
+    
     date,time = datetime.split(':')
     dd,momo,yy = date.split('-')
     ss,mm,hh = time.split('-')
-    #print(yy,momo,dd,hh,mm,ss)
+    
     return (int(yy),int(momo),int(dd),int(hh),int(mm),int(ss))
 
+#Open the csv file and store each row as a dictionary with key as Place and value as area code
 with open('AreaNameEnum.csv') as csv_file:
     csv_reader = csv.reader(csv_file, delimiter=',')
     line_count = 0
 
     for row in csv_reader:
         dict1[row[0]] = row[1]
-#print(dict1)
+
 from sqlalchemy.ext.declarative import declarative_base
 Base = declarative_base()
 
@@ -55,11 +56,10 @@ engine = create_engine('sqlite:///ride_mgmt.db', connect_args={'check_same_threa
 con = engine.connect()
 Base.metadata.create_all(engine)
 
-
 Session = sessionmaker(bind=engine)
 session=Session()
 
-
+#Checks if the password provided meets the constraints
 def sha(password) :
     hexa_decimal = ['1','2','3','4','5','6','7','8','9','0','a','b','c','d','e','f','A','B','C','D','E','F']
     if len(password) == 40 :
@@ -69,16 +69,18 @@ def sha(password) :
         return True
     return False
 
-
+#Health Check to confirm Load balancer is sending requests to Rides Instance
 @app.route('/',methods=["GET"])
 def dummy_api():
     return  {},200
 
+#Utility function to increase the count of the requests. Requests are increased with the help of a lock for tackling concurrency issues.
 def http_count():
     with counter.get_lock():
         counter.value += 1
 
-
+#API for adding the request count 
+#Returns a JSONified list of a single number having the number of requests sent to the rides instance, and the HTTP response status code.
 @app.route('/api/v1/_count',methods=["GET"])
 def http_count1():
     list1 = []
@@ -87,7 +89,8 @@ def http_count1():
     return json.dumps(list1),200
 
 
-
+#API for resetting the counts sent to the rides instance. 
+#Returns an empty JSON array, and the HTTP response status code.
 @app.route('/api/v1/_count',methods=["DELETE"])
 def http_count_reset():
     with counter.get_lock():
@@ -95,7 +98,8 @@ def http_count_reset():
     return {},200
 
 
-
+#API for counting the number of rides in the Ride table of the rides instance. 
+#Returns a JSONified list of a single number having the number of rides in the Ride table, and the HTTP response status code.
 @app.route('/api/v1/rides/count',methods=["GET"])
 def ride_count():
      http_count()
@@ -111,7 +115,8 @@ def ride_count():
      list1.append(ride_count)
      return json.dumps(list1),200
 
-# 3
+#API for creating a new ride in the Ride and Riders table. 
+#Returns an empty JSON array, and the HTTP response status code.
 @app.route('/api/v1/rides', methods=["POST","PUT"])
 def createride():
     http_count()
@@ -119,24 +124,19 @@ def createride():
         return {},405
     ride = dict(request.json)
     count = 0
-    #= ride['password']
+    
     if 'source' not in ride.keys() or 'destination' not in ride.keys() or 'created_by' not in ride.keys() or 'timestamp' not in ride.keys() :
         return {},400
     date = parse(ride['timestamp'])
     d = datetime(date[0],date[1],date[2],date[3],date[4],date[5])
     if d < datetime.now() :
         return {},400
-
-    #print(user["username"])
-
     results=requests.get('http://ajeyaexponential-982805114.us-east-1.elb.amazonaws.com/api/v1/users',headers = {'Origin':'http://35.171.66.199'})
-
     for _ in results:
         count+=1
     if count==0:
         return {},400
     results=results.json()
-    #print("dsasdaads")
     print("sdasd=",results)
     l=results
     a=ride['created_by']
@@ -151,7 +151,6 @@ def createride():
             ride['where']="1=1"
             ride['columns']='rideid'
             res=requests.post('http://localhost:8000/api/v1/db/read', json = ride).json()
-            #print(res)
             ride_count = 0
             for row in res :
                 ride_count += 1
@@ -159,11 +158,10 @@ def createride():
                 for row in res :
                     if ride_id<row['rideid']:
                         ride_id = row['rideid']
-                #print(ride_id)                 
                 ride_id += 1
             else :
                 ride_id = 1
-            #print(ride_id)
+            
             ''' TIMESTAMP CASE IS NOT COVERED'''
             ride['isPut'] = 1
             ride['table'] = 'Ride'
@@ -172,8 +170,6 @@ def createride():
             ride['isPut'] = 1
             ride['table'] = 'Riders'
             ride['insert'] = str(ride_id) + comma + quotes + ride['created_by'] + quotes
-            #print(ride_id)
-            #print("create"+ride['timestamp'])
             res = requests.post('http://localhost:8000/api/v1/db/write', json = ride)
             return {},201
         else :
@@ -183,15 +179,13 @@ def createride():
     else :
         return {},405
 
-# 4
+#API for listing the upcoming rides for the given source and destination from the Rides table. 
+#Returns a JSON array of the list of upcoming rides for the given source and destination, and the HTTP response status code.
 @app.route('/api/v1/rides', methods=["GET"])
 def listupcomingride():
     http_count()
-    #print("entered")
     source = request.args.get('source')
-    #print("Source:" + source)
     destination = request.args.get('destination')
-    #print(source)
     if source == None or destination == None or source == '' or destination == '':
         return {},400
     try:
@@ -205,30 +199,20 @@ def listupcomingride():
     res['table'] = 'Ride'
     res['where'] = 'source = ' + source + ' and dest = ' + destination
     res = requests.post('http://localhost:8000/api/v1/db/read', json = res)
-    #print(res)
+    
     res = res.json()
-    #print(res)
-    #return
-    #return jsonify(res)
-    #return res.json()
-
     l = []
-    #print("entry")
     for row in res :
-        #print('here')
         date = parse(row['timestamp'])
-        #print(date)
         d = datetime(date[0],date[1],date[2],date[3],date[4],date[5])
         if d > datetime.now() :
             l.append({'rideId' : row['rideid'],'username' : row['createdby'],'timestamp' : row['timestamp']})
-        #l.append({'rideId' : row['rideid'],'username' : row['createdby'],'timestamp' : row['timestamp']})
     if l == [] :
         return {},204
-
     return jsonify(l),200
 
-
-# 5
+#API for listing the details of the given ride ID from the Rides and Riders table. 
+#Returns a JSON array of the list of the details of the given ride ID, and the HTTP response status code.
 @app.route('/api/v1/rides/<rideId>', methods=["GET"])
 def listride(rideId):
     http_count()
@@ -244,7 +228,6 @@ def listride(rideId):
     res_ride=requests.post('http://localhost:8000/api/v1/db/read', json = ride).json()
     response = {}
     response['rideId'] = rideId
-    #print(res_ride)
     count = 0
     for row in res_ride :
         count += 1
@@ -260,17 +243,15 @@ def listride(rideId):
             response["timestamp"] = row['timestamp']
             response["source"] = row['source']
             response["destination"] = row['dest']
-            #print(response)
         response["users"] = []
         for row in res_rider :
             response["users"].append(row['username'])
-
-        #print(response)
         return response,200
     else:
         return {},405
 
-# 6
+#API for a user joining a ride given ride ID in the URL, and the user details as part of the body. 
+#Returns an empty JSON array, and the HTTP response status code.
 @app.route('/api/v1/rides/<rideId>', methods=["POST"])
 def joinride(rideId):
     http_count()
@@ -315,7 +296,8 @@ def joinride(rideId):
         return {},200
 
 
-# 7
+#API for deleting a ride from the Rides and Riders table given the ride ID.
+#Returns an empty JSON array , and the HTTP response status code.
 @app.route('/api/v1/rides/<rideId>', methods=["DELETE"])
 def deleteride(rideId):
     http_count()
@@ -330,22 +312,22 @@ def deleteride(rideId):
         count += 1
     if count == 0 :
         return {},400
-
     else :
         ride['table'] = 'Riders'
         ride['column'] = 'rideid'
         ride['isPut'] = 0
         ride['value']=rideId
-        #ride['insert'] = rideId + comma + quotes + user + quotes
+        
         res = requests.post('http://localhost:8000/api/v1/db/write', json = ride)
         ride['table'] = 'Ride'
 
-        #ride['insert'] = rideId + comma + quotes + user + quotes
+        
 
         res = requests.post('http://localhost:8000/api/v1/db/write', json = ride)
         return {},200
 
-# 8
+#API for updating the required table. The update could be inserting a row or removing a row.
+#Returns the stringified cursor object of the executed query
 @app.route('/api/v1/db/write', methods=["POST"])
 def writetodb():
     user_details = request.json
@@ -356,14 +338,12 @@ def writetodb():
         rs=con.execute('DELETE FROM ' + user_details['table'] + ' WHERE  ' + user_details['column'] + '=' '"' + user_details['value'] + '"')
         return str(rs)
 
-
-# 9
+#API for reading from the required table. 
+#Returns the JSONified list of the details of the read query executed.
 @app.route('/api/v1/db/read', methods=["POST"])
 def readfromdb():
-    user_details = dict(request.json)
-    #print("AJEya\n")
+    user_details = dict(request.json)  
     rs = con.execute('SELECT '+ user_details['columns'] + ' FROM ' + user_details['table'] + ' WHERE ' + user_details['where'])
-    #print("ajeya BS")
     list1=[]
     for row in rs:
         d={}
@@ -374,13 +354,15 @@ def readfromdb():
             list1.append(d)
     return json.dumps(list1)
 
-# 10
+#API for clearing rides and ride database
+#Returns an empty JSON and the HTTP Response status code
 @app.route('/api/v1/db/clear',methods=["POST"])
 def cleardb():
     con.execute('DELETE FROM Riders')
     con.execute('DELETE FROM Ride')
     return {},200
 
+#main function to run the server. Server runs on the port 8000, and host as 0.0.0.0
 if __name__ == '__main__':
     app.run(debug=True,host='0.0.0.0',port=8000)
 
