@@ -67,7 +67,7 @@ def createContainer(containers):
         varname="slave"+str(count)
         print("new slave name created",varname)
         print(count,"count of container")
-        container = client.containers.run("final_project_slave","python worker.py",network="dbaas_default",environment = ["container_type=slave","container_name="+varname],detach=True, restart_policy={"Name": "on-failure"})
+        container = client.containers.run("dbaas_slave","python worker.py",network="dbaas_default",environment = ["container_type=slave","container_name="+varname],detach=True, restart_policy={"Name": "on-failure"})
         countc = 0
         for _ in client.containers.list():
             countc+=1
@@ -196,9 +196,10 @@ def list_worker1():
 def list_worker():
     pid_list = []
     for container in client.containers.list():
-        if "slave" in container.name:
+        if "slave" in container.name or "master" in container.name:
             temp=client1.inspect_container(container.id)['State']['Pid']
             pid_list.append(temp)
+       
     return json.dumps(sorted(pid_list)),200
 
 #This will crash the master.
@@ -223,41 +224,40 @@ def crash_master():
 # The spawing of new slave is taking care by zookeeper , since there is a change in the children watch and we have set the flagrem
 # Setting flagrem means , we are allowing the slave to be created(corresponding fuction will be called)	
 def crash_slave1():
-	global flagrem	
-	print("something Start\n")
-	res1 = requests.get("http://localhost:8000/api/v1/worker/list")
-	l = res1.json()
-	print("list is = ",l)
-	if(len(l)>0):
-		flagrem = 0
-		delete_id = l[-1]
-		print("the delete id = ",delete_id)
-		for container in client.containers.list():
-			if client1.inspect_container(container.id)["State"]["Pid"]==delete_id:
-				print("something inside\n")
-				container.stop()			
-				break
+    global flagrem	
+    print("something Start\n")
+    res1 = list_worker1()
+    l = res1
+    print("list is = ",l)
+    if(len(l)>0):
+        flagrem = 0
+        delete_id = l[-1]
+        print("the delete id = ",delete_id)
+        for container in client.containers.list():
+            if client1.inspect_container(container.id)["State"]["Pid"]==delete_id:
+                print("something inside\n")
+                container.stop()			
+                break
+    return json.dumps([delete_id]),200
 #This will crash the slave and will spawn a new slave immediately
 # The spawing of new slave is taking care by zookeeper , since there is a change in the children watch and we have set the flagrem
 # Setting flagrem means , we are allowing the slave to be created(corresponding fuction will be called)			
 @app.route('/api/v1/crash/slave',methods=["POST"])
 def crash_slave():
-	global flagrem	
-	print("something Start\n")
-	res1 = requests.get("http://localhost:8000/api/v1/worker/list")
-	l = res1.json()
-	print("list is = ",l)
-	if(len(l)>0):
-		flagrem = 1
-		delete_id = l[-1]
-		print("the delete id = ",delete_id)
-		for container in client.containers.list():
-			if client1.inspect_container(container.id)["State"]["Pid"]==delete_id:
-				print("something inside\n")
-				container.stop()
-				break
+    global flagrem	
+    res1 = list_worker1()
+    l = res1 
+    print("list is = ",l)
+    if(len(l)>0):
+        flagrem = 1
+        delete_id = l[-1]
+        print("the delete id = ",delete_id)
+        for container in client.containers.list():
+            if client1.inspect_container(container.id)["State"]["Pid"]==delete_id:
+                container.stop()
+                break
 			
-	return {},200
+    return json.dumps([delete_id]),200
 
 #Class for our SqlAlchemy database
 #The connections for our rabbitMq
@@ -353,3 +353,4 @@ if __name__ == '__main__':
     t1.start()
     app.run(debug=True,host='0.0.0.0',port=8000)
     
+

@@ -35,7 +35,7 @@ zk = KazooClient(hosts='zookeeper:2181')
 zk.start()
 
 #Worker znode created
-result = "fdsg"
+result = "worker"
 strmaster="slave,"+str(result)
 print("strslave:",strmaster)
 strmaster1=bytes(strmaster, 'ascii')
@@ -98,7 +98,14 @@ def callbackForSync(ch, method, properties, body):
         con.execute(body)
 
 #Function that consumes for read and sync messages from RPC and SyncReceive channels respectively
-def reader():   
+def reader():
+    #Channel RPC is the channel for sending data read from the database in slave container to the orchestrator container waiting for response
+    channelRPC = connection.channel()
+    channelRPC.queue_declare(queue='rpc_queue')
+    channelRPC.basic_qos(prefetch_count=30)
+    channelRPC.basic_consume(queue='rpc_queue', on_message_callback=on_request,auto_ack=True)
+    
+    #Channel SyncReceive is the channel for receiving write requests from the master
     channelSyncReceive = connection.channel()
     channelSyncReceive.exchange_declare(exchange='logs', exchange_type='fanout')
     result = channelSyncReceive.queue_declare(queue='sync_queue')
@@ -106,11 +113,15 @@ def reader():
     channelSyncReceive.queue_bind(exchange='logs', queue="sync_queue")
     channelSyncReceive.basic_consume(
         queue=queue_name, on_message_callback=callbackForSync, auto_ack=True)
+
     channelSyncReceive.start_consuming()
     channelRPC.start_consuming()
 
 #called by master to publish sync requests to all the slaves
-def writeToSyncQueue(str1):        
+def writeToSyncQueue(str1):
+    #Channel sync send is the channel that is used by the master to send the write query to all the slaves
+    channelSyncSend = connection.channel()
+    channelSyncSend.exchange_declare(exchange='logs', exchange_type='fanout')     
     channelSyncSend.basic_publish(exchange='logs', routing_key="sync_queue", body=str1)
     
 #executes the write request in the database
@@ -161,6 +172,10 @@ def on_request(ch, method, properties, body):
 
 #Consume for write requests sent from Orchestrator
 def writer():
+    #Channel Writer is used by master to consume write requests sent from the Orchestrator
+    channelWriter = connection.channel()
+    channelWriter.queue_declare(queue='WRITE_queue',durable=True)
+    channelWriter.basic_qos(prefetch_count=30)
     channelWriter.basic_consume(queue='WRITE_queue', on_message_callback=callback,auto_ack=True)
     channelWriter.start_consuming()
 
@@ -168,21 +183,6 @@ def writer():
 connection = pika.BlockingConnection(
     pika.ConnectionParameters(host='rabbitmq'))
     
-#Channel sync send is the channel that is used by the master to send the write query to all the slaves
-channelSyncSend = connection.channel()
-channelSyncSend.exchange_declare(exchange='logs', exchange_type='fanout')
-
-#Channel RPC is the channel for sending data read from the database in slave container to the orchestrator container waiting for response
-channelRPC = connection.channel()
-channelRPC.queue_declare(queue='rpc_queue')
-channelRPC.basic_qos(prefetch_count=30)
-channelRPC.basic_consume(queue='rpc_queue', on_message_callback=on_request,auto_ack=True)
-
-#Channel Writer is used by master to consume write requests sent from the Orchestrator
-channelWriter = connection.channel()
-channelWriter.queue_declare(queue='WRITE_queue',durable=True)
-channelWriter.basic_qos(prefetch_count=30)
-
 #Based on the environment variable called "container_type" the worker runs as master or slave
 if __name__ == '__main__':
     if os.environ["container_type"] == "master" :
@@ -191,3 +191,4 @@ if __name__ == '__main__':
         syncFirst()
         reader()
     app.run(host='0.0.0.0',port=8000)
+
